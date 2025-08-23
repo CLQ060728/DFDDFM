@@ -1,0 +1,13 @@
+pip==25.2
+wheel==0.45.1
+setuptools==80.9.0
+torch==2.8.0
+torchvision==0.23.0
+transformers==4.55.4
+xformers==0.0.32.post2
+numpy==1.26.4
+scipy==1.16.1
+pandas==2.3.2
+scikit-learn==1.7.1
+matplotlib==3.10.5
+lightning==2.5.3
