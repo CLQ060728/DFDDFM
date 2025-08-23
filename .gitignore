@@ -1,6 +1,6 @@
 .ipynb_checkpoints/
 __pycache__/
-./MAIN.ipynb
+MAIN.ipynb
 
 data/
 logs/
