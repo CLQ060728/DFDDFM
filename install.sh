@@ -4,7 +4,7 @@ mkdir -p pre_trained/META_DINOV3/LVD/
 mkdir -p pre_trained/META_DINOV3/SAT/
 
 sudo apt install unzip
-pip uninstall torchaudio
+pip uninstall torchaudio -y
 pip install --upgrade -r requirements.txt
 
 # gdown "https://drive.google.com/drive/folders/1fm3Jd8lFMiSP1qgdmsxfqlJZGpr_bXsx?usp=drive_link" -O pre_trained/OPENAI_CLIP/ --folder
