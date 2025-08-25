@@ -1,3 +1,6 @@
+# Author: Qian Liu
+# Email: liu.qian.pro@gmail.com
+
 import torch
 from DFDDFM import SVDResidualLinear
 

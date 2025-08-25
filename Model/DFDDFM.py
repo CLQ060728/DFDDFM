@@ -1,3 +1,6 @@
+# Author: Qian Liu
+# Email: liu.qian.pro@gmail.com
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
