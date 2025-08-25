@@ -1,5 +1,4 @@
 mkdir -p pre_trained/OPENAI_CLIP/
-mkdir -p pre_trained/APPLE_DFN_CLIP/
 mkdir -p pre_trained/META_DINOV2/
 mkdir -p pre_trained/META_DINOV3/LVD/
 mkdir -p pre_trained/META_DINOV3/SAT/
