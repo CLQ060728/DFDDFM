@@ -3,6 +3,9 @@
 
 import torch
 from DFDDFM import SVDResidualLinear
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def compute_orthogonal_loss(svd_residual_layer: SVDResidualLinear):

@@ -5,9 +5,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math
+import logging
+
+logger = logging.getLogger(__name__)
 
 
-# SVDResidualLinear layer for orthogonal fine-tuning
+# SVDResidualLinear module for orthogonal fine-tuning
 class SVDResidualLinear(nn.Module):
     def __init__(self, in_features, out_features, r, bias=True, init_weight=None):
         super(SVDResidualLinear, self).__init__()
