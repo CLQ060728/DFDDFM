@@ -5,176 +5,42 @@ from typing import List
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torchvision import transforms
-from transformers import AutoImageProcessor, CLIPModel, AutoModel
-from PIL.Image import Image
+from transformers import CLIPModel, AutoModel
 import math
 import logging
+from BaseSVDDFM import BaseSVDDFM
+
 
 logger = logging.getLogger(__name__)
 
 
-class ClipFeatureExtractor(nn.Module):
-    def __init__(self, device: str, chkpt_dir: str="./pre_trained/OPENAI_CLIP/"):
-        """
-        params:
-            device: str, device to run the model on
-            chkpt_dir: str, directory of the pre-trained CLIP model
-        """
-        super(ClipFeatureExtractor, self).__init__()
-        self.clip_vision_model = CLIPModel.from_pretrained(chkpt_dir).vision_model
-        self.clip_vision_model.requires_grad_(False)  # Freeze the CLIP model
-        # self.clip_vision_model.config.output_hidden_states = True  # Enable output hidden states
-        self.clip_vision_model = self.clip_vision_model.to(device)
-        self.device = device
-
-    def forward(self, imgs: List[Image] | Image):
-        if isinstance(imgs, List):
-            imgs = torch.stack([self.transform_img_clip()(img).float() for img in imgs]).to(self.device)
-        elif isinstance(imgs, Image):
-            imgs = self.transform_img_clip()(imgs).unsqueeze(0).float().to(self.device)
-        else:
-            raise ValueError("Input should be a list of PIL Images or a single PIL Image.")
-
-        return self.clip_vision_model(imgs)
-
-    def transform_img_clip(self, resize_size: int = 224):
-        to_tensor = transforms.ToTensor()
-        resize = transforms.Resize((resize_size, resize_size), antialias=True,
-                                            interpolation=transforms.InterpolationMode.BICUBIC)
-        normalize = transforms.Normalize(
-            mean=(0.48145466, 0.4578275, 0.40821073),
-            std=(0.26862954, 0.26130258, 0.27577711),
-        )
-        return transforms.Compose([to_tensor, resize, normalize])
-
-
-class Dinov2FeatureExtractor(nn.Module):
-    def __init__(self, device: str, chkpt_dir: str="./pre_trained/DINO_V2/"):
-        """
-        params:
-            device: str, device to run the model on
-            chkpt_dir: str, directory of the pre-trained DINO V2 model
-        """
-        super(Dinov2FeatureExtractor, self).__init__()
-        self.processor = AutoImageProcessor.from_pretrained(chkpt_dir, use_fast=True)
-        self.dino_model = AutoModel.from_pretrained(chkpt_dir)
-        self.dino_model.requires_grad_(False)  # Freeze the DINO model
-        self.dino_model = self.dino_model.to(device)
-        self.device = device
-
-    def forward(self, imgs: List[Image] | Image):
-        if isinstance(imgs, List):
-            imgs = torch.stack([self.transform_img_dino()(img).float() for img in imgs]).to(self.device)
-        elif isinstance(imgs, Image):
-            imgs = self.transform_img_dino()(imgs).unsqueeze(0).float().to(self.device)
-        else:
-            raise ValueError("Input should be a list of PIL Images or a single PIL Image.")
-        
-        inputs = self.processor(images=imgs, return_tensors="pt")
-        
-        return self.dino_model(**inputs)
-
-    def transform_img_dino(self, resize_size: int = 224):
-        to_tensor = transforms.ToTensor()
-        resize = transforms.Resize((resize_size, resize_size), antialias=True,
-                                            interpolation=transforms.InterpolationMode.BICUBIC)
-        normalize = transforms.Normalize(
-            mean=(0.485, 0.456, 0.406),
-            std=(0.229, 0.224, 0.225)
-        )
-        return transforms.Compose([to_tensor, resize, normalize])
-
-
-class Dinov3FeatureExtractor(nn.Module):
-    def __init__(self, device: str, pre_ds: str = "LVD", chkpt_dir: str="./pre_trained/DINO_V3/"):
-        """
-        params:
-            device: str, device to run the model on
-            pre_ds: str, pre-training dataset, defaults to "LVD-1689M", the other is "SAT-493M"
-            chkpt_dir: str, directory of the pre-trained DINO V3 model
-        """
-        super(Dinov3FeatureExtractor, self).__init__()
-        if pre_ds == "LVD":
-            chkpt_dir = chkpt_dir + "LVD/"
-        elif pre_ds == "SAT":
-            chkpt_dir = chkpt_dir + "SAT/"
-        else:
-            raise ValueError("Unknown pre-training dataset.")
-        
-        self.processor = AutoImageProcessor.from_pretrained(chkpt_dir, use_fast=True)
-        self.dino_model = AutoModel.from_pretrained(
-            chkpt_dir,
-            device_map="auto"
-        )
-        self.dino_model.requires_grad_(False)  # Freeze the DINO model
-        self.dino_model = self.dino_model.to(device)
-        self.device = device
-        self.pre_ds = pre_ds
-
-    def forward(self, imgs: List[Image] | Image):
-        if self.pre_ds == "LVD":
-            transform_img = self.transform_img_lvd
-        elif self.pre_ds == "SAT":
-            transform_img = self.make_transform_sat
-
-        if isinstance(imgs, List):
-            imgs = torch.stack([transform_img()(img).float() for img in imgs]).to(self.device)
-        elif isinstance(imgs, Image):
-            imgs = transform_img()(imgs).unsqueeze(0).float().to(self.device)
-        else:
-            raise ValueError("Input should be a list of PIL Images or a single PIL Image.")
-
-        inputs = self.processor(images=imgs, return_tensors="pt")
-
-        return self.dino_model(**inputs)
-
-    def transform_img_lvd(self, resize_size: int = 224):
-        to_tensor = transforms.ToTensor()
-        resize = transforms.Resize((resize_size, resize_size), antialias=True,
-                                   interpolation=transforms.InterpolationMode.BICUBIC)
-        normalize = transforms.Normalize(
-            mean=(0.485, 0.456, 0.406),
-            std=(0.229, 0.224, 0.225),
-        )
-        return transforms.Compose([to_tensor, resize, normalize])
-    
-    def make_transform_sat(self, resize_size: int = 224):
-        to_tensor = transforms.ToTensor()
-        resize = transforms.Resize((resize_size, resize_size), antialias=True,
-                                   interpolation=transforms.InterpolationMode.BICUBIC)
-        normalize = transforms.Normalize(
-            mean=(0.430, 0.411, 0.296),
-            std=(0.213, 0.156, 0.143),
-        )
-        return transforms.Compose([to_tensor, resize, normalize])
-
-
-class ClipSVD(nn.Module):
-    def __init__(self, device: str, classifier: bool=False, chkpt_dir: str="./pre_trained/OPENAI_CLIP/"):
+class ClipSVDDFM(nn.Module, BaseSVDDFM):
+    def __init__(self, device: str, dfm: bool=False, dfm_num_layers: int=2, dfm_num_mani: int=4,
+                 out_feat_type: str="hidden", chkpt_dir: str="./pre_trained/OPENAI_CLIP/"):
         """
            params:
                device: str, device to run the model on
-               classifier: bool, whether to use the classifier head
+               dfm: bool, whether to add DFM (Disentangled Fake Manifolds) layers
+               dfm_num_layers: int, number of DFM layers
+               dfm_num_mani: int, number of orthogonal manifold layers
+               out_feat_type: str, type of clip output features ("hidden" or "cls")
                chkpt_dir: str, directory of the pre-trained CLIP model
         """
-        super(ClipSVD, self).__init__()
+        super(ClipSVDDFM, self).__init__(dfm=dfm, dfm_num_layers=dfm_num_layers, dfm_num_mani=dfm_num_mani,
+                                          out_feat_type=out_feat_type)
         self.chkpt_dir = chkpt_dir
         self.device = device
-        self.__build_svd_clip()
-        self.classifier = classifier
-        self.head = nn.Linear(1024, 2)
+        self.__build_svd_clip__()
 
-    def __build_svd_clip(self):
+    def __build_svd_clip__(self):
         # Load the pre-trained CLIP model
         self.clip_vision_model = CLIPModel.from_pretrained(self.chkpt_dir).vision_model
         self.clip_vision_model = self.replace_svd_residual_to_attn_linear(self.clip_vision_model, 1023)
-        self.clip_vision_model = self.clip_vision_model.to(self.device)
+        # self.clip_vision_model = self.clip_vision_model.to(self.device)
 
-    def forward(self, x: List, y):
-        pass
-    
-    # Method to replace nn.Linear modules within attention modules with SVDResidualLinear
+    def forward(self, x: torch.Tensor):
+        return self.forward_common(x, self.clip_vision_model)
+
     def replace_svd_residual_to_attn_linear(self, model, r):
         for name, module in model.named_children():
             if name == "encoder":
@@ -183,13 +49,126 @@ class ClipSVD(nn.Module):
                         for name2, module2 in clip_encoder_layer.named_children():
                             if 'self_attn' == name2:
                                 # Replace nn.Linear layers in this module
-                                for sub_name, sub_module in module2.named_modules():
+                                for sub_name, sub_module in module2.named_children():
                                     if isinstance(sub_module, nn.Linear):
                                         # Get parent module within self_attn
                                         parent_module = module2
                                         # Replace the nn.Linear layer with SVDResidualLinear
                                         setattr(parent_module, sub_name,
                                                 replace_svd_residual(layer_num, sub_module, r))
+
+        # After replacing, set requires_grad for residual components
+        for param_name, param in model.named_parameters():
+            if any(x in param_name for x in ['S_residual', 'U_residual', 'V_residual']):
+                param.requires_grad = True
+            else:
+                param.requires_grad = False
+        
+        return model
+
+
+class Dinov2SVD(nn.Module):
+    def __init__(self, device: str, classifier: bool=False, chkpt_dir: str="./pre_trained/META_DINOV2/"):
+        """
+           params:
+               device: str, device to run the model on
+               classifier: bool, whether to use the classifier head
+               chkpt_dir: str, directory of the pre-trained DINO model
+        """
+        super(Dinov2SVD, self).__init__()
+        self.chkpt_dir = chkpt_dir
+        self.device = device
+        self.__build_svd_dino()
+        self.classifier = classifier
+        self.head = nn.Linear(1024, 2)
+
+    def __build_svd_dino(self):
+        # Load the pre-trained DINO model
+        self.dino_model = AutoModel.from_pretrained(self.chkpt_dir)
+        self.dino_model = self.replace_svd_residual_to_attn_linear(self.dino_model, 1023)
+        self.dino_model = self.dino_model.to(self.device)
+
+    def forward(self, x: torch.Tensor):
+        return self.forward_common(x, self.dino_model)
+
+    # Method to replace nn.Linear modules within attention modules with SVDResidualLinear
+    def replace_svd_residual_to_attn_linear(self, model, r):
+        for name, module in model.named_children():
+            if name == "encoder":
+                for _, module1 in module.named_children():
+                    for layer_num, Dinov2Layer in enumerate(module1):
+                        for name2, module2 in Dinov2Layer.named_children():
+                            if 'attention' == name2:
+                                for name3, module3 in module2.named_children():
+                                    if 'attention' == name3 or 'output' == name3:
+                                        # Replace nn.Linear layers in this module
+                                        for sub_name, sub_module in module3.named_children():
+                                            if isinstance(sub_module, nn.Linear):
+                                                # Get parent module within attention
+                                                parent_module = module3
+                                                # Replace the nn.Linear layer with SVDResidualLinear
+                                                setattr(parent_module, sub_name,
+                                                        replace_svd_residual(layer_num, sub_module, r))
+
+        # After replacing, set requires_grad for residual components
+        for param_name, param in model.named_parameters():
+            if any(x in param_name for x in ['S_residual', 'U_residual', 'V_residual']):
+                param.requires_grad = True
+            else:
+                param.requires_grad = False
+        
+        return model
+
+
+class Dinov3SVD(nn.Module):
+    def __init__(self, device: str, model_type: str="LVD", classifier: bool=False,
+                 chkpt_dir: str="./pre_trained/META_DINOV3/"):
+        """
+           params:
+               device: str, device to run the model on
+               model_type: str, type of the model (e.g., "LVD", "SAT")
+               classifier: bool, whether to use the classifier head
+               chkpt_dir: str, directory of the pre-trained DINO model
+        """
+        super(Dinov3SVD, self).__init__()
+        self.chkpt_dir = chkpt_dir
+        self.device = device
+        self.model_type = model_type
+        self.__build_svd_dino()
+        self.classifier = classifier
+        self.head = nn.Linear(1024, 2)
+
+    def __build_svd_dino(self):
+        # Load the pre-trained DINO model
+        if self.model_type == "LVD":
+            pretrained_path = self.chkpt_dir + "LVD/"
+        elif self.model_type == "SAT":
+            pretrained_path = self.chkpt_dir + "SAT/"
+        else:
+            raise ValueError("Unknown model type.")
+        
+        self.dino_model = AutoModel.from_pretrained(pretrained_path, device_map="auto")
+        self.dino_model = self.replace_svd_residual_to_attn_linear(self.dino_model, 1023)
+        self.dino_model = self.dino_model.to(self.device)
+
+    def forward(self, x: List, y):
+        pass
+
+    # Method to replace nn.Linear modules within attention modules with SVDResidualLinear
+    def replace_svd_residual_to_attn_linear(self, model, r):
+        for name, module in model.named_children():
+            if name == "layer":
+                for layer_num, DINOv3ViTLayer in enumerate(module):
+                    for name1, module1 in DINOv3ViTLayer.named_children():
+                        if 'attention' == name1:
+                            # Replace nn.Linear layers in this module
+                            for sub_name, sub_module in module1.named_children():
+                                if isinstance(sub_module, nn.Linear):
+                                    # Get parent module within attention
+                                    parent_module = module1
+                                    # Replace the nn.Linear layer with SVDResidualLinear
+                                    setattr(parent_module, sub_name,
+                                            replace_svd_residual(layer_num, sub_module, r))
 
         # After replacing, set requires_grad for residual components
         for param_name, param in model.named_parameters():
@@ -208,8 +187,12 @@ def replace_svd_residual(layer_num, module, r):
         out_features = module.out_features
         bias = module.bias is not None
 
+        logger.debug(f"module.weight: {module.weight.min()} ~ {module.weight.max()}")
+
         # Create SVDResidualLinear module
         new_module = SVDResidualLinear(in_features, out_features, r, bias=bias, init_weight=module.weight.data.clone())
+
+        logger.debug(f"new_module.weight_r: {new_module.weight_r.min()} ~ {new_module.weight_r.max()}")
 
         if bias and module.bias is not None:
             new_module.bias.data.copy_(module.bias.data)
