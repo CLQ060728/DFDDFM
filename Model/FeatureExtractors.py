@@ -14,17 +14,17 @@ logger = logging.getLogger(__name__)
 
 
 class ClipFeatureExtractor(nn.Module):
-    def __init__(self, device: str, chkpt_dir: str="./pre_trained/OPENAI_CLIP/"):
+    def __init__(self, device: torch.device, chkpt_dir: str="./pre_trained/OPENAI_CLIP/"):
         """
         params:
-            device: str, device to run the model on
+            device: torch.device, device to run the model on
             chkpt_dir: str, directory of the pre-trained CLIP model
         """
         super(ClipFeatureExtractor, self).__init__()
         self.clip_vision_model = CLIPModel.from_pretrained(chkpt_dir).vision_model
         self.clip_vision_model.requires_grad_(False)  # Freeze the CLIP model
         # self.clip_vision_model.config.output_hidden_states = True  # Enable output hidden states
-        self.clip_vision_model = self.clip_vision_model.to(device)
+        self.clip_vision_model.to(device)
         self.device = device
 
     def forward(self, imgs: List[Image] | Image):
@@ -49,17 +49,17 @@ class ClipFeatureExtractor(nn.Module):
 
 
 class Dinov2FeatureExtractor(nn.Module):
-    def __init__(self, device: str, chkpt_dir: str="./pre_trained/DINO_V2/"):
+    def __init__(self, device: torch.device, chkpt_dir: str="./pre_trained/DINO_V2/"):
         """
         params:
-            device: str, device to run the model on
+            device: torch.device, device to run the model on
             chkpt_dir: str, directory of the pre-trained DINO V2 model
         """
         super(Dinov2FeatureExtractor, self).__init__()
         self.processor = AutoImageProcessor.from_pretrained(chkpt_dir, use_fast=True)
         self.dino_model = AutoModel.from_pretrained(chkpt_dir)
         self.dino_model.requires_grad_(False)  # Freeze the DINO model
-        self.dino_model = self.dino_model.to(device)
+        self.dino_model.to(device)
         self.device = device
 
     def forward(self, imgs: List[Image] | Image):
@@ -86,10 +86,10 @@ class Dinov2FeatureExtractor(nn.Module):
 
 
 class Dinov3FeatureExtractor(nn.Module):
-    def __init__(self, device: str, pre_ds: str = "LVD", chkpt_dir: str="./pre_trained/DINO_V3/"):
+    def __init__(self, device: torch.device, pre_ds: str = "LVD", chkpt_dir: str="./pre_trained/DINO_V3/"):
         """
         params:
-            device: str, device to run the model on
+            device: torch.device, device to run the model on
             pre_ds: str, pre-training dataset, defaults to "LVD-1689M", the other is "SAT-493M"
             chkpt_dir: str, directory of the pre-trained DINO V3 model
         """
@@ -107,7 +107,7 @@ class Dinov3FeatureExtractor(nn.Module):
             device_map="auto"
         )
         self.dino_model.requires_grad_(False)  # Freeze the DINO model
-        self.dino_model = self.dino_model.to(device)
+        self.dino_model.to(device)
         self.device = device
         self.pre_ds = pre_ds
 

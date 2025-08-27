@@ -11,22 +11,25 @@ logger = logging.getLogger(__name__)
 
 
 class BaseSVDDFM(ABC):
-    def __init__(self, dfm: bool=False, dfm_num_layers: int=2, dfm_num_mani: int=4,
+    def __init__(self, device: torch.device, dfm: bool=False, dfm_num_layers: int=2, dfm_num_mani: int=4,
                  out_feat_type: str="hidden"):
         """
            params:
+               device: torch.device, the device to which the model will be moved
                dfm: bool, whether to add DFM (Disentangled Fake Manifolds) layers
                dfm_num_layers: int, number of DFM layers
                dfm_num_mani: int, number of orthogonal manifold layers
                out_feat_type: str, type of clip output features ("hidden" or "cls")
         """
         super(BaseSVDDFM, self).__init__()
-        
+
+        assert isinstance(device, torch.device), "device should be a torch.device"
         assert isinstance(dfm, bool), "dfm should be a boolean"
         assert isinstance(dfm_num_layers, int) and dfm_num_layers in [2, 3], "dfm_num_layers should be 2 or 3"
         assert isinstance(dfm_num_mani, int) and 0 < dfm_num_mani <= 8, "dfm_num_mani should be between 1 and 8"
         assert out_feat_type in ["hidden", "cls"], "out_feat_type should be either 'hidden' or 'cls'"
 
+        self.device = device
         self.dfm = dfm
         self.orthogonal_manifolds = nn.ModuleList([SingleManifoldLayer(dfm_num_layers) for _ in range(dfm_num_mani)]) if dfm else None
         self.dfm_decoder = SingleManifoldLayer(dfm_num_layers) if dfm else None
@@ -51,7 +54,14 @@ class BaseSVDDFM(ABC):
             return self.head(features)
         else:
             return self.head(features)
-    
+
+    def to(self):
+        self.head.to(self.device)
+        if self.dfm:
+            self.dfm_decoder.to(self.device)
+            for manifold in self.orthogonal_manifolds:
+                manifold.to(self.device)
+
     # Method to replace nn.Linear modules within attention modules with SVDResidualLinear
     @abstractmethod
     def replace_svd_residual_to_attn_linear(self, model, r):

@@ -1,7 +1,6 @@
 # Author: Qian Liu
 # Email: liu.qian.pro@gmail.com
 
-from typing import List
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -14,20 +13,20 @@ from BaseSVDDFM import BaseSVDDFM
 logger = logging.getLogger(__name__)
 
 
-class ClipSVDDFM(nn.Module, BaseSVDDFM):
-    def __init__(self, device: str, dfm: bool=False, dfm_num_layers: int=2, dfm_num_mani: int=4,
+class ClipSVDDFM(BaseSVDDFM, nn.Module):
+    def __init__(self, device: torch.device, dfm: bool=False, dfm_num_layers: int=2, dfm_num_mani: int=4,
                  out_feat_type: str="hidden", chkpt_dir: str="./pre_trained/OPENAI_CLIP/"):
         """
            params:
-               device: str, device to run the model on
+               device: torch.device, device to run the model on
                dfm: bool, whether to add DFM (Disentangled Fake Manifolds) layers
                dfm_num_layers: int, number of DFM layers
                dfm_num_mani: int, number of orthogonal manifold layers
                out_feat_type: str, type of clip output features ("hidden" or "cls")
                chkpt_dir: str, directory of the pre-trained CLIP model
         """
-        super(ClipSVDDFM, self).__init__(dfm=dfm, dfm_num_layers=dfm_num_layers, dfm_num_mani=dfm_num_mani,
-                                          out_feat_type=out_feat_type)
+        super(ClipSVDDFM, self).__init__(device, dfm=dfm, dfm_num_layers=dfm_num_layers, dfm_num_mani=dfm_num_mani,
+                                         out_feat_type=out_feat_type)
         self.chkpt_dir = chkpt_dir
         self.device = device
         self.__build_svd_clip__()
@@ -40,6 +39,10 @@ class ClipSVDDFM(nn.Module, BaseSVDDFM):
 
     def forward(self, x: torch.Tensor):
         return self.forward_common(x, self.clip_vision_model)
+
+    def to(self):
+        super().to()
+        self.clip_vision_model.to(self.device)
 
     def replace_svd_residual_to_attn_linear(self, model, r):
         for name, module in model.named_children():
@@ -67,31 +70,37 @@ class ClipSVDDFM(nn.Module, BaseSVDDFM):
         return model
 
 
-class Dinov2SVD(nn.Module):
-    def __init__(self, device: str, classifier: bool=False, chkpt_dir: str="./pre_trained/META_DINOV2/"):
+class Dinov2SVDDFM(BaseSVDDFM, nn.Module):
+    def __init__(self, device: torch.device, dfm: bool=False, dfm_num_layers: int=2, dfm_num_mani: int=4,
+                 out_feat_type: str="hidden", chkpt_dir: str="./pre_trained/META_DINOV2/"):
         """
            params:
-               device: str, device to run the model on
-               classifier: bool, whether to use the classifier head
-               chkpt_dir: str, directory of the pre-trained DINO model
+               device: torch.device, device to run the model on
+               dfm: bool, whether to add DFM (Disentangled Fake Manifolds) layers
+               dfm_num_layers: int, number of DFM layers
+               dfm_num_mani: int, number of orthogonal manifold layers
+               out_feat_type: str, type of clip output features ("hidden" or "cls")
+               chkpt_dir: str, directory of the pre-trained CLIP model
         """
-        super(Dinov2SVD, self).__init__()
+        super(Dinov2SVDDFM, self).__init__(device, dfm=dfm, dfm_num_layers=dfm_num_layers, dfm_num_mani=dfm_num_mani,
+                                           out_feat_type=out_feat_type)
         self.chkpt_dir = chkpt_dir
         self.device = device
-        self.__build_svd_dino()
-        self.classifier = classifier
-        self.head = nn.Linear(1024, 2)
+        self.__build_svd_dino__()
 
-    def __build_svd_dino(self):
+    def __build_svd_dino__(self):
         # Load the pre-trained DINO model
         self.dino_model = AutoModel.from_pretrained(self.chkpt_dir)
         self.dino_model = self.replace_svd_residual_to_attn_linear(self.dino_model, 1023)
-        self.dino_model = self.dino_model.to(self.device)
+        # self.dino_model = self.dino_model.to(self.device)
 
     def forward(self, x: torch.Tensor):
         return self.forward_common(x, self.dino_model)
 
-    # Method to replace nn.Linear modules within attention modules with SVDResidualLinear
+    def to(self):
+        super().to()
+        self.dino_model.to(self.device)
+
     def replace_svd_residual_to_attn_linear(self, model, r):
         for name, module in model.named_children():
             if name == "encoder":
@@ -120,25 +129,28 @@ class Dinov2SVD(nn.Module):
         return model
 
 
-class Dinov3SVD(nn.Module):
-    def __init__(self, device: str, model_type: str="LVD", classifier: bool=False,
+class Dinov3SVDDFM(BaseSVDDFM, nn.Module):
+    def __init__(self, device: torch.device, dfm: bool=False, dfm_num_layers: int=2, dfm_num_mani: int=4,
+                 out_feat_type: str="hidden", model_type: str="LVD",
                  chkpt_dir: str="./pre_trained/META_DINOV3/"):
         """
            params:
-               device: str, device to run the model on
-               model_type: str, type of the model (e.g., "LVD", "SAT")
-               classifier: bool, whether to use the classifier head
-               chkpt_dir: str, directory of the pre-trained DINO model
+               device: torch.device, device to run the model on
+               dfm: bool, whether to add DFM (Disentangled Fake Manifolds) layers
+               dfm_num_layers: int, number of DFM layers
+               dfm_num_mani: int, number of orthogonal manifold layers
+               out_feat_type: str, type of clip output features ("hidden" or "cls")
+               model_type: str, type of DINOv3 model ("LVD" or "SAT")
+               chkpt_dir: str, directory of the pre-trained CLIP model
         """
-        super(Dinov3SVD, self).__init__()
+        super(Dinov3SVDDFM, self).__init__(device, dfm=dfm, dfm_num_layers=dfm_num_layers, dfm_num_mani=dfm_num_mani,
+                                           out_feat_type=out_feat_type)
         self.chkpt_dir = chkpt_dir
         self.device = device
         self.model_type = model_type
-        self.__build_svd_dino()
-        self.classifier = classifier
-        self.head = nn.Linear(1024, 2)
+        self.__build_svd_dino__()
 
-    def __build_svd_dino(self):
+    def __build_svd_dino__(self):
         # Load the pre-trained DINO model
         if self.model_type == "LVD":
             pretrained_path = self.chkpt_dir + "LVD/"
@@ -149,10 +161,14 @@ class Dinov3SVD(nn.Module):
         
         self.dino_model = AutoModel.from_pretrained(pretrained_path, device_map="auto")
         self.dino_model = self.replace_svd_residual_to_attn_linear(self.dino_model, 1023)
-        self.dino_model = self.dino_model.to(self.device)
+        # self.dino_model = self.dino_model.to(self.device)
 
-    def forward(self, x: List, y):
-        pass
+    def forward(self, x: torch.Tensor):
+        return self.forward_common(x, self.dino_model)
+
+    def to(self):
+        super().to()
+        self.dino_model.to(self.device)
 
     # Method to replace nn.Linear modules within attention modules with SVDResidualLinear
     def replace_svd_residual_to_attn_linear(self, model, r):
