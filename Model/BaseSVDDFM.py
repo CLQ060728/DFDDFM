@@ -119,7 +119,8 @@ class BaseSVDDFM(ABC):
     def to(self):
         self.head.to(self.device)
         if self.dfm:
-            self.dfm_decoder.to(self.device)
+            if self.has_decoder:
+                self.dfm_decoder.to(self.device)
             for manifold in self.orthogonal_manifolds:
                 manifold.to(self.device)
 
