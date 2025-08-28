@@ -12,7 +12,8 @@ logger = logging.getLogger(__name__)
 
 class BaseSVDDFM(ABC):
     def __init__(self, device: torch.device, dfm: bool=False, dfm_num_layers: int=2, dfm_num_mani: int=4,
-                 dfm_aggr: str ="sum", has_decoder: bool=True, out_feat_type: str="hidden"):
+                 dfm_aggr: str ="sum", has_encoder: bool=True, has_decoder: bool=True,
+                 out_feat_type: str="hidden"):
         """
            params:
                device: torch.device, the device to which the model will be moved
@@ -20,6 +21,7 @@ class BaseSVDDFM(ABC):
                dfm_num_layers: int, number of DFM layers
                dfm_num_mani: int, number of orthogonal manifold layers
                dfm_aggr: str, aggregation method for DFM ("sum" or "concat")
+               has_encoder: bool, whether to add an encoder layer
                has_decoder: bool, whether to add a decoder layer
                out_feat_type: str, type of clip output features ("hidden" or "cls")
         """
@@ -30,6 +32,7 @@ class BaseSVDDFM(ABC):
         assert isinstance(dfm_num_layers, int) and dfm_num_layers in [2, 3], "dfm_num_layers should be 2 or 3"
         assert isinstance(dfm_num_mani, int) and 0 < dfm_num_mani <= 8, "dfm_num_mani should be between 1 and 8"
         assert isinstance(dfm_aggr, str) and dfm_aggr in ["sum", "concat"], f"dfm_aggr should be either 'sum' or 'concat' but got {dfm_aggr}"
+        assert isinstance(has_encoder, bool), "has_encoder should be a boolean"
         assert isinstance(has_decoder, bool), "has_decoder should be a boolean"
         assert out_feat_type in ["hidden", "cls"], "out_feat_type should be either 'hidden' or 'cls'"
 
@@ -39,15 +42,19 @@ class BaseSVDDFM(ABC):
         head_hidden_dim = 1024
         if dfm:
             self.dfm_aggr = dfm_aggr
+            encoder_decoder_num_layers = 2
             if dfm_aggr == "sum":
                 hidden_dim = 1024
             else: # dfm_aggr == "concat":
                 hidden_dim = 1024 * dfm_num_mani
-            
+            if has_encoder:
+                self.dfm_encoder = SingleManifoldLayer(encoder_decoder_num_layers)
+            else:
+                self.dfm_encoder = None
             if has_decoder:
                 logger.debug(f"hidden_dim and head_hidden_dim when having decoder: {hidden_dim}, {head_hidden_dim}")
 
-                self.dfm_decoder = SingleManifoldLayer(dfm_num_layers, hidden_dim)
+                self.dfm_decoder = SingleManifoldLayer(encoder_decoder_num_layers, hidden_dim)
             else:
                 head_hidden_dim = hidden_dim
 
@@ -55,9 +62,11 @@ class BaseSVDDFM(ABC):
 
                 self.dfm_decoder = None
         else:
+            self.dfm_encoder = None
             self.dfm_decoder = None
         
         self.out_feat_type = out_feat_type
+        self.has_encoder = has_encoder
         self.has_decoder = has_decoder
         self.feat_model = None  # To be defined in the subclass
         self.head = nn.Sequential(
@@ -78,6 +87,8 @@ class BaseSVDDFM(ABC):
 
         if self.dfm:
             results_manifolds_features = None
+            if self.has_encoder:
+                features = self.dfm_encoder(features)
             if self.dfm_aggr == "sum":
                 manifolds_features = torch.tensor([]).to(features.device)
                 for manifold in self.orthogonal_manifolds:
@@ -119,6 +130,8 @@ class BaseSVDDFM(ABC):
     def to(self):
         self.head.to(self.device)
         if self.dfm:
+            if self.has_encoder:
+                self.dfm_encoder.to(self.device)
             if self.has_decoder:
                 self.dfm_decoder.to(self.device)
             for manifold in self.orthogonal_manifolds:
