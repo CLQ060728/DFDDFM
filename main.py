@@ -11,7 +11,7 @@ from Model.DFDDFM import ClipSVDDFM, Dinov2SVDDFM, Dinov3SVDDFM
 from Model.FeatureExtractors import ClipFeatureExtractor, Dinov2FeatureExtractor, Dinov3FeatureExtractor
 from Loss.DFDDFMLosses import DFDLoss, ReconstructionLoss, SVDLoss, ConsistencyLoss, DistanceLoss
 from Loss.DFDDFMLosses import SparsityLoss, ReconRegLoss
-from Dataset.dataset_loader import DFDDFMTrainDataModule
+from Dataset.DataLoader import DFDDFMTrainDataModule
 import logging
 
 logger = logging.getLogger(__name__)
