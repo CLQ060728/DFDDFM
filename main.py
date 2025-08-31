@@ -11,6 +11,7 @@ from Model.DFDDFM import ClipSVDDFM, Dinov2SVDDFM, Dinov3SVDDFM
 from Model.FeatureExtractors import ClipFeatureExtractor, Dinov2FeatureExtractor, Dinov3FeatureExtractor
 from Loss.DFDDFMLosses import DFDLoss, ReconstructionLoss, SVDLoss, ConsistencyLoss, DistanceLoss
 from Loss.DFDDFMLosses import SparsityLoss, ReconRegLoss
+from Dataset.dataset_loader import DFDDFMTrainDataModule
 import logging
 
 logger = logging.getLogger(__name__)
@@ -448,7 +449,7 @@ class DFDDFMTrainer(LTN.LightningModule):
 
 
 def cli_main():
-    cli = LightningCLI(DFDDFMTrainer, BoringDataModule, seed_everything_default=88)
+    cli = LightningCLI(DFDDFMTrainer, DFDDFMTrainDataModule, seed_everything_default=88)
 
 
 if __name__ == "__main__":
