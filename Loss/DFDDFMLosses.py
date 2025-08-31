@@ -5,70 +5,45 @@ import torch
 from torch import nn, Tensor
 import torch.nn.functional as F
 from typing import Literal
-from Model.DFDDFM import SVDResidualLinear
+from Model.DFDDFM import SVDResidualLinear, ClipSVDDFM, Dinov2SVDDFM, Dinov3SVDDFM
 from BaseLoss import BaseLoss
 import logging
 
 logger = logging.getLogger(__name__)
 
 
-class ReconstructionLoss(BaseLoss):
+class DFDLoss(BaseLoss):
     """
-    A class representing a reconstruction loss function.
-
-    Args:
-        loss_type (Literal["l1", "l2", "smooth_l1"]): The type of loss function to use.
-        coef (float): The coefficient to multiply the loss by.
-        name (str): The name of the loss function.
-        reduction (str): The reduction method to use.
-        check_nan (bool): Whether to check for NaN values in the loss.
-
-    Attributes:
-        loss_type (Literal["l1", "l2", "smooth_l1"]): The type of loss function being used.
-        loss_fn (function): The loss function being used.
-        name (str): The name of the loss function.
+    A class representing a Deep Fake Detection (DFD) classification loss function.
     """
 
-    def __init__(
-        self,
-        loss_type: Literal["l1", "l2", "smooth_l1"] = "l2",
-        coef: float = 1.0,
-        name="reconstruction",
-        reduction="mean",
-        check_nan=False
+    def __init__(self,
+                 coef: float = 1.0,
+                 name="dfd",
+                 reduction="mean",
+                 check_nan=False
     ):
-        super(ReconstructionLoss, self).__init__(coef, check_nan, reduction)
-        self.loss_type = loss_type
-        if self.loss_type == "l1":
-            self.loss_fn = F.l1_loss
-        elif self.loss_type == "l2":
-            self.loss_fn = F.mse_loss
-        elif self.loss_type == "smooth_l1":
-            self.loss_fn = F.smooth_l1_loss
-        else:
-            raise NotImplementedError(f"Unknown loss type: {loss_type}")
-        self.name = f"{name}_loss_{self.loss_type}"
+        super(DFDLoss, self).__init__(coef, check_nan, reduction)
+        self.name = f"{name}_loss"
+        self.loss_function = F.binary_cross_entropy
 
-    def __call__(
-        self,
-        predicted: Tensor,
-        gt: Tensor,
-        name: str = None
+    def __call__(self,
+                 logits: Tensor,
+                 targets: Tensor,
+                 name: str = None
     ):
         """
-        Compute the loss between the predicted and ground truth values.
+        Compute the DFD loss for a given DFDDFM model.
 
         Args:
-            predicted (Tensor): The predicted values.
-            gt (Tensor): The ground truth values.
+            predictions (Tensor): The predicted logits from the model.
+            targets (Tensor): The ground truth labels.
             name (str): The name of the loss function.
 
         Returns:
-            dict: Dictionary containing the reconstruction loss value.
+            dict: Dictionary containing the DFD loss value.
         """
-        gt, predicted = gt.squeeze(), predicted.squeeze()
-        loss = self.loss_fn(predicted, gt, reduction="none")
-        name = self.name if name is None else name
+        loss = self.loss_function(F.sigmoid(logits), targets, reduction='none')
 
         return self.return_loss(name, loss)
 
@@ -110,26 +85,71 @@ class SVDLoss(BaseLoss):
         Returns:
             dict: Dictionary containing the orthogonal and keepsv losses values.
         """
-        reg_term = 0.0
+        reg_term = torch.tensor(0.0)
         num_reg = 0
-        for module in dfddfm_model.modules():
 
-            logger.debug(f"module type: {type(module)}")
-            logger.debug(f"current module: {module}")
+        if isinstance(dfddfm_model, ClipSVDDFM):
+            for name, module in dfddfm_model.named_children():
+                if name == "encoder":
+                    for _, module1 in module.named_children():
+                        for _, clip_encoder_layer in enumerate(module1):
+                            for name2, module2 in clip_encoder_layer.named_children():
+                                if 'self_attn' == name2:
+                                    # compute orthogonal and keepsv losses
+                                    for _, sub_module in module2.named_children():
+                                        if isinstance(sub_module, SVDResidualLinear):
+                                            reg_term += self.__compute_orthogonal_loss__(sub_module)
 
-            if isinstance(module, SVDResidualLinear):
-                reg_term += module.__compute_orthogonal_loss__(module)
+                                            logger.debug(f"orthogonal reg_term: {reg_term}")
 
-                logger.debug(f"orthogonal reg_term: {reg_term}")
+                                            reg_term += self.__compute_keepsv_loss__(sub_module)
+                                            
+                                            logger.debug(f"keepsv reg_term: {reg_term}")
 
-                reg_term += module.__compute_keepsv_loss__(module)
+                                            num_reg += 1
+        elif isinstance(dfddfm_model, Dinov2SVDDFM):
+            for name, module in dfddfm_model.named_children():
+                if name == "encoder":
+                    for _, module1 in module.named_children():
+                        for _, Dinov2Layer in enumerate(module1):
+                            for name2, module2 in Dinov2Layer.named_children():
+                                if 'attention' == name2:
+                                    for name3, module3 in module2.named_children():
+                                        if 'attention' == name3 or 'output' == name3:
+                                            # compute orthogonal and keepsv losses
+                                            for _, sub_module in module3.named_children():
+                                                if isinstance(sub_module, SVDResidualLinear):
+                                                    reg_term += self.__compute_orthogonal_loss__(sub_module)
 
-                logger.debug(f"keepsv reg_term: {reg_term}")
+                                                    logger.debug(f"orthogonal reg_term: {reg_term}")
 
-                num_reg += 1
+                                                    reg_term += self.__compute_keepsv_loss__(sub_module)
+
+                                                    logger.debug(f"keepsv reg_term: {reg_term}")
+
+                                                    num_reg += 1
+        elif isinstance(dfddfm_model, Dinov3SVDDFM):
+            for name, module in dfddfm_model.named_children():
+                if name == "layer":
+                    for _, DINOv3ViTLayer in enumerate(module):
+                        for name1, module1 in DINOv3ViTLayer.named_children():
+                            if 'attention' == name1:
+                                # compute orthogonal and keepsv losses
+                                for _, sub_module in module1.named_children():
+                                    if isinstance(sub_module, SVDResidualLinear):
+                                        reg_term += self.__compute_orthogonal_loss__(sub_module)
+
+                                        logger.debug(f"orthogonal reg_term: {reg_term}")
+
+                                        reg_term += self.__compute_keepsv_loss__(sub_module)
+
+                                        logger.debug(f"keepsv reg_term: {reg_term}")
+
+                                        num_reg += 1
+        
         loss = reg_term / num_reg
 
-        logger.debug(f"number of svd loss layers: {num_reg}")
+        logger.debug(f"number of svd loss layers: {num_reg}; final loss: {loss}")
 
         name = self.name if name is None else name
 
@@ -152,8 +172,8 @@ class SVDLoss(BaseLoss):
             # Using frobenius norm to compute loss
             loss = 0.5 * torch.norm(UUT - UUT_identity, p='fro') + 0.5 * torch.norm(VVT - VVT_identity, p='fro')
         else:
-            loss = 0.0
-            
+            loss = torch.tensor(0.0)
+
         return loss
 
     def __compute_keepsv_loss__(self, svd_residual_layer: SVDResidualLinear):
@@ -165,51 +185,67 @@ class SVDLoss(BaseLoss):
 
             loss = torch.abs(weight_current_fnorm ** 2 - svd_residual_layer.weight_original_fnorm ** 2)
         else:
-            loss = 0.0
+            loss = torch.tensor(0.0)
         
         return loss
 
 
-class ConsistencyLoss(BaseLoss):
+class ReconstructionLoss(BaseLoss):
     """
-    A class representing a consistency loss function.
+    A class representing a reconstruction loss function.
 
     Args:
-        coef (float): The coefficient for the loss.
+        loss_type (Literal["l1", "l2", "smooth_l1"]): The type of loss function to use.
+        coef (float): The coefficient to multiply the loss by.
         name (str): The name of the loss function.
         reduction (str): The reduction method to use.
         check_nan (bool): Whether to check for NaN values in the loss.
 
     Attributes:
+        loss_type (Literal["l1", "l2", "smooth_l1"]): The type of loss function being used.
+        loss_fn (function): The loss function being used.
         name (str): The name of the loss function.
     """
 
-    def __init__(self,
-                 coef: float = 1.0,
-                 name="consistency",
-                 reduction="mean",
-                 check_nan=False):
-        super(ConsistencyLoss, self).__init__(coef, check_nan, reduction)
-        self.name = f"{name}_loss"
-        self.loss_fn = F.mse_loss
+    def __init__(
+        self,
+        loss_type: Literal["l1", "l2", "smooth_l1"] = "l2",
+        coef: float = 1.0,
+        name="reconstruction",
+        reduction="mean",
+        check_nan=False
+    ):
+        super(ReconstructionLoss, self).__init__(coef, check_nan, reduction)
+        self.loss_type = loss_type
+        if self.loss_type == "l1":
+            self.loss_fn = F.l1_loss
+        elif self.loss_type == "l2":
+            self.loss_fn = F.mse_loss
+        elif self.loss_type == "smooth_l1":
+            self.loss_fn = F.smooth_l1_loss
+        else:
+            raise NotImplementedError(f"Unknown loss type: {loss_type}")
+        self.name = f"{name}_loss_{self.loss_type}"
 
-    def __call__(self,
-                 S_hat: Tensor,
-                 S_original: Tensor,
-                 name: str = None
+    def __call__(
+        self,
+        decoder_features: Tensor,
+        encoder_features: Tensor,
+        name: str = None
     ):
         """
-        Compute the consistency loss for a given SVDResidualLinear layer.
+        Compute the loss between the predicted and ground truth values.
 
         Args:
-            S_hat (Tensor): The predicted single disentangled manifold features.
-            S_original (Tensor): The original single disentangled manifold features.
+            decoder_features (Tensor): The predicted values.
+            encoder_features (Tensor): The ground truth values.
             name (str): The name of the loss function.
 
         Returns:
-            dict: Dictionary containing the consistency loss value.
+            dict: Dictionary containing the reconstruction loss value.
         """
-        loss = self.loss_fn(S_hat, S_original, reduction='none')
+        encoder_features, decoder_features = encoder_features.squeeze(), decoder_features.squeeze()
+        loss = self.loss_fn(decoder_features, encoder_features, reduction="none")
         name = self.name if name is None else name
 
         return self.return_loss(name, loss)
@@ -311,23 +347,71 @@ class SparsityLoss(BaseLoss):
         Returns:
             dict: Dictionary containing the sparsity loss value.
         """
-        spar_manifolds_features1 = torch.zeros_like(manifolds_features1[0, :, :])
-        spar_manifolds_features2 = torch.zeros_like(manifolds_features2[0, :, :])
+        spar_manifolds_features1 = torch.zeros_like(manifolds_features1[0, :, 1])
+        spar_manifolds_features2 = torch.zeros_like(manifolds_features2[0, :, 1])
 
         logger.debug(f"spar_manifolds_features1 shape: {spar_manifolds_features1.size()}")
         logger.debug(f"spar_manifolds_features2 shape: {spar_manifolds_features2.size()}")
 
         for manifold_idx in range(manifolds_features1.size(0)):
             remaining_indices = torch.tensor([idx for idx in range(manifolds_features1.size(0)) if idx != manifold_idx]).to(manifolds_features1)
+            
+            logger.debug(f"manifold_idx: {manifold_idx}; remaining_indices: {remaining_indices}")
+            
             sum_manifolds_features1 = manifolds_features1[remaining_indices, :, :].sum(dim=0, keepdim=True)
             sum_manifolds_features2 = manifolds_features2[remaining_indices, :, :].sum(dim=0, keepdim=True)
-            spar_manifolds_features1 += torch.abs(manifolds_features1[manifold_idx, :, :] * sum_manifolds_features1)
-            spar_manifolds_features2 += torch.abs(manifolds_features2[manifold_idx, :, :] * sum_manifolds_features2)
+            spar_manifolds_features1 += torch.abs(manifolds_features1[manifold_idx, :, :] * sum_manifolds_features1).sum(-1)
+            spar_manifolds_features2 += torch.abs(manifolds_features2[manifold_idx, :, :] * sum_manifolds_features2).sum(-1)
 
         loss = spar_manifolds_features1 + spar_manifolds_features2
 
         logger.debug(f"loss shape: {loss.size()}; min value: {loss.min()}; max value: {loss.max()};")
 
+        name = self.name if name is None else name
+
+        return self.return_loss(name, loss)
+
+
+class ConsistencyLoss(BaseLoss):
+    """
+    A class representing a consistency loss function.
+
+    Args:
+        coef (float): The coefficient for the loss.
+        name (str): The name of the loss function.
+        reduction (str): The reduction method to use.
+        check_nan (bool): Whether to check for NaN values in the loss.
+
+    Attributes:
+        name (str): The name of the loss function.
+    """
+
+    def __init__(self,
+                 coef: float = 1.0,
+                 name="consistency",
+                 reduction="mean",
+                 check_nan=False):
+        super(ConsistencyLoss, self).__init__(coef, check_nan, reduction)
+        self.name = f"{name}_loss"
+        self.loss_fn = F.mse_loss
+
+    def __call__(self,
+                 S_hat: Tensor,
+                 S_original: Tensor,
+                 name: str = None
+    ):
+        """
+        Compute the consistency loss for a given SVDResidualLinear layer.
+
+        Args:
+            S_hat (Tensor): The predicted disentangled manifolds features.
+            S_original (Tensor): The original disentangled manifolds features.
+            name (str): The name of the loss function.
+
+        Returns:
+            dict: Dictionary containing the consistency loss value.
+        """
+        loss = self.loss_fn(S_hat, S_original, reduction='none')
         name = self.name if name is None else name
 
         return self.return_loss(name, loss)
@@ -364,8 +448,8 @@ class ReconRegLoss(BaseLoss):
         Compute the reconstruction regularization loss for disentangled manifolds.
 
         Args:
-            manifolds_features1 (Tensor): The predicted single disentangled manifold features.
-            manifolds_features2 (Tensor): The original single disentangled manifold features.
+            manifolds_features1 (Tensor): The disentangled manifolds features for the first input.
+            manifolds_features2 (Tensor): The disentangled manifolds features for the second input.
             name (str): The name of the loss function.
 
         Returns:
@@ -379,9 +463,12 @@ class ReconRegLoss(BaseLoss):
         logger.debug(f"dis_matrix shape: {dis_matrix.size()}; min value: {dis_matrix.min()}; max value: {dis_matrix.max()};")
 
         loss = (dis_matrix.mean(dim=0, keepdim=True) - 1 / dis_matrix.size(1))
+
+        logger.debug(f"loss shape: {loss.size()}; loss: {loss}")
+
         loss = torch.pow(loss, 2).sum(dim=1)
 
-        logger.debug(f"loss shape: {loss.size()}; min value: {loss.min()}; max value: {loss.max()};")
+        logger.debug(f"loss shape: {loss.size()}; loss: {loss}")
 
         name = self.name if name is None else name
 

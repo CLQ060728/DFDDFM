@@ -54,7 +54,9 @@ class BaseLoss(nn.Module):
         Args:
             coef (float): Coefficient to scale the loss by.
         """
+        logger.debug(f"loss coefficient before setting: {self.coef}")
         self.coef = coef
+        logger.debug(f"Set loss coefficient to {self.coef}")
 
     def return_loss(self, name: str, loss: Tensor):
         """

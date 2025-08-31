@@ -1,10 +1,10 @@
 # Author: Qian Liu
 # Email: liu.qian.pro@gmail.com
 
-from json import decoder
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from typing import Literal
 from transformers import CLIPModel, AutoModel
 import math
 import logging
@@ -16,22 +16,20 @@ logger = logging.getLogger(__name__)
 
 class ClipSVDDFM(BaseSVDDFM, nn.Module):
     def __init__(self, device: torch.device, dfm: bool=False, dfm_num_layers: int=2, dfm_num_mani: int=4,
-                 dfm_aggr: str="sum", has_encoder: bool=True, has_decoder: bool=True,
-                 out_feat_type: str="hidden", chkpt_dir: str="./pre_trained/OPENAI_CLIP/"):
+                 dfm_aggr: Literal["SUM", "CONCAT"] ="SUM", out_feat_type: Literal["HIDDEN", "CLS"] ="HIDDEN",
+                 chkpt_dir: str="./pre_trained/OPENAI_CLIP/"):
         """
            params:
                device: torch.device, device to run the model on
                dfm: bool, whether to add DFM (Disentangled Fake Manifolds) layers
                dfm_num_layers: int, number of DFM layers
                dfm_num_mani: int, number of orthogonal manifold layers
-               dfm_aggr: str, aggregation method for DFM ("sum" or "concat")
-               has_encoder: bool, whether to add an encoder layer
-               has_decoder: bool, whether to add a decoder layer
-               out_feat_type: str, type of clip output features ("hidden" or "cls")
+               dfm_aggr: Literal["SUM", "CONCAT"], aggregation method for DFM ("SUM" or "CONCAT")
+               out_feat_type: Literal["HIDDEN", "CLS"], type of clip output features ("HIDDEN" or "CLS")
                chkpt_dir: str, directory of the pre-trained CLIP model
         """
-        super(ClipSVDDFM, self).__init__(device, dfm=dfm, dfm_num_layers=dfm_num_layers, dfm_num_mani=dfm_num_mani,
-                                         dfm_aggr=dfm_aggr, has_encoder=has_encoder, has_decoder=has_decoder,
+        super(ClipSVDDFM, self).__init__(device, dfm=dfm, dfm_num_layers=dfm_num_layers, 
+                                         dfm_num_mani=dfm_num_mani, dfm_aggr=dfm_aggr,
                                          out_feat_type=out_feat_type)
 
         assert isinstance(chkpt_dir, str), "chkpt_dir should be a string"
@@ -43,6 +41,7 @@ class ClipSVDDFM(BaseSVDDFM, nn.Module):
     def __build_svd_clip__(self):
         # Load the pre-trained CLIP model
         self.feat_model = CLIPModel.from_pretrained(self.chkpt_dir).vision_model
+        self.feat_model.requires_grad_(False)
         self.feat_model = self.replace_svd_residual_to_attn_linear(self.feat_model, 1023)
         # self.feat_model = self.feat_model.to(self.device)
 
@@ -81,7 +80,7 @@ class ClipSVDDFM(BaseSVDDFM, nn.Module):
 
 class Dinov2SVDDFM(BaseSVDDFM, nn.Module):
     def __init__(self, device: torch.device, dfm: bool=False, dfm_num_layers: int=2, dfm_num_mani: int=4,
-                 dfm_aggr: str ="sum", has_encoder: bool=True, has_decoder: bool=True, out_feat_type: str="hidden",
+                 dfm_aggr: Literal["SUM", "CONCAT"] ="SUM", out_feat_type: Literal["HIDDEN", "CLS"] ="HIDDEN",
                  chkpt_dir: str="./pre_trained/META_DINOV2/"):
         """
            params:
@@ -89,14 +88,12 @@ class Dinov2SVDDFM(BaseSVDDFM, nn.Module):
                dfm: bool, whether to add DFM (Disentangled Fake Manifolds) layers
                dfm_num_layers: int, number of DFM layers
                dfm_num_mani: int, number of orthogonal manifold layers
-               dfm_aggr: str, aggregation method for DFM ("sum" or "concat")
-               has_encoder: bool, whether to add an encoder layer
-               has_decoder: bool, whether to add a decoder layer
-               out_feat_type: str, type of clip output features ("hidden" or "cls")
+               dfm_aggr: Literal["SUM", "CONCAT"], aggregation method for DFM ("SUM" or "CONCAT")
+               out_feat_type: Literal["HIDDEN", "CLS"], type of clip output features ("HIDDEN" or "CLS")
                chkpt_dir: str, directory of the pre-trained CLIP model
         """
-        super(Dinov2SVDDFM, self).__init__(device, dfm=dfm, dfm_num_layers=dfm_num_layers, dfm_num_mani=dfm_num_mani,
-                                           dfm_aggr=dfm_aggr, has_encoder=has_encoder, has_decoder=has_decoder,
+        super(Dinov2SVDDFM, self).__init__(device, dfm=dfm, dfm_num_layers=dfm_num_layers,
+                                           dfm_num_mani=dfm_num_mani, dfm_aggr=dfm_aggr,
                                            out_feat_type=out_feat_type)
 
         assert isinstance(chkpt_dir, str), "chkpt_dir should be a string"
@@ -108,6 +105,7 @@ class Dinov2SVDDFM(BaseSVDDFM, nn.Module):
     def __build_svd_dino__(self):
         # Load the pre-trained DINO model
         self.feat_model = AutoModel.from_pretrained(self.chkpt_dir)
+        self.feat_model.requires_grad_(False)
         self.feat_model = self.replace_svd_residual_to_attn_linear(self.feat_model, 1023)
         # self.feat_model = self.feat_model.to(self.device)
 
@@ -148,26 +146,24 @@ class Dinov2SVDDFM(BaseSVDDFM, nn.Module):
 
 class Dinov3SVDDFM(BaseSVDDFM, nn.Module):
     def __init__(self, device: torch.device, dfm: bool=False, dfm_num_layers: int=2, dfm_num_mani: int=4,
-                 dfm_aggr: str="sum", has_encoder: bool=True, has_decoder: bool=True, out_feat_type: str="hidden",
-                 model_type: str="LVD", chkpt_dir: str="./pre_trained/META_DINOV3/"):
+                 dfm_aggr: Literal["SUM", "CONCAT"] ="SUM", out_feat_type: Literal["HIDDEN", "CLS"] ="HIDDEN",
+                 model_type: Literal["LVD", "SAT"] ="LVD", chkpt_dir: str="./pre_trained/META_DINOV3/"):
         """
            params:
                device: torch.device, device to run the model on
                dfm: bool, whether to add DFM (Disentangled Fake Manifolds) layers
                dfm_num_layers: int, number of DFM layers
                dfm_num_mani: int, number of orthogonal manifold layers
-               dfm_aggr: str, aggregation method for DFM ("sum" or "concat")
-               has_encoder: bool, whether to add an encoder layer
-               has_decoder: bool, whether to add a decoder layer
-               out_feat_type: str, type of clip output features ("hidden" or "cls")
-               model_type: str, type of DINOv3 model ("LVD" or "SAT")
+               dfm_aggr: Literal["SUM", "CONCAT"], aggregation method for DFM ("SUM" or "CONCAT")
+               out_feat_type: Literal["HIDDEN", "CLS"], type of clip output features ("HIDDEN" or "CLS")
+               model_type: Literal["LVD", "SAT"], type of DINOv3 model ("LVD" or "SAT")
                chkpt_dir: str, directory of the pre-trained CLIP model
         """
-        super(Dinov3SVDDFM, self).__init__(device, dfm=dfm, dfm_num_layers=dfm_num_layers, dfm_num_mani=dfm_num_mani,
-                                           dfm_aggr=dfm_aggr, has_encoder=has_encoder, has_decoder=has_decoder,
+        super(Dinov3SVDDFM, self).__init__(device, dfm=dfm, dfm_num_layers=dfm_num_layers,
+                                           dfm_num_mani=dfm_num_mani, dfm_aggr=dfm_aggr,
                                            out_feat_type=out_feat_type)
 
-        assert isinstance(model_type, str) and model_type in ["LVD", "SAT"], "model_type should be either 'LVD' or 'SAT'"
+        assert model_type in ["LVD", "SAT"], "model_type should be either 'LVD' or 'SAT'"
         assert isinstance(chkpt_dir, str), "chkpt_dir should be a string"
 
         self.chkpt_dir = chkpt_dir
@@ -183,6 +179,7 @@ class Dinov3SVDDFM(BaseSVDDFM, nn.Module):
             pretrained_path = self.chkpt_dir + "SAT/"
         
         self.feat_model = AutoModel.from_pretrained(pretrained_path, device_map="auto")
+        self.feat_model.requires_grad_(False)
         self.feat_model = self.replace_svd_residual_to_attn_linear(self.feat_model, 1023)
         # self.feat_model = self.feat_model.to(self.device)
 
