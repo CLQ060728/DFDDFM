@@ -51,19 +51,20 @@ class ClipFeatureExtractor(nn.Module):
         if not self.as_linear_classifier:
             return self.clip_vision_model(imgs)
         else:
-            features = self.clip_vision_model(imgs)
+            features = self.clip_vision_model(imgs) 
             features = features.last_hidden_state[:, 1:, :].mean(dim=1) # Average pooling excluding CLS token
             return self.head(features)
 
-    def transform_img_clip(self, resize_size: int = 224):
-        to_tensor = transforms.ToTensor()
+    def transform_img_clip(self, resize_size: int = 256):
         resize = transforms.Resize((resize_size, resize_size), antialias=True,
                                             interpolation=transforms.InterpolationMode.BICUBIC)
+        center_crop = transforms.CenterCrop(224)
+        to_tensor = transforms.ToTensor()
         normalize = transforms.Normalize(
             mean=(0.48145466, 0.4578275, 0.40821073),
             std=(0.26862954, 0.26130258, 0.27577711),
         )
-        return transforms.Compose([to_tensor, resize, normalize])
+        return transforms.Compose([resize, center_crop, to_tensor, normalize])
 
 
 class Dinov2FeatureExtractor(nn.Module):
@@ -76,7 +77,7 @@ class Dinov2FeatureExtractor(nn.Module):
             chkpt_dir: str, directory of the pre-trained DINO V2 model
         """
         super(Dinov2FeatureExtractor, self).__init__()
-        self.processor = AutoImageProcessor.from_pretrained(chkpt_dir, use_fast=True)
+        # self.processor = AutoImageProcessor.from_pretrained(chkpt_dir, use_fast=True)
         self.dino_model = AutoModel.from_pretrained(chkpt_dir)
         self.dino_model.requires_grad_(False)  # Freeze the DINO model
         self.dino_model.to(device)
@@ -101,25 +102,29 @@ class Dinov2FeatureExtractor(nn.Module):
             raise ValueError("Input should be a list of PIL Images or a single PIL Image"
                              + " or a torch.Tensor.")
         
-        inputs = self.processor(images=imgs, return_tensors="pt")
-        
+        # if not isinstance(imgs, torch.Tensor):
+        #     inputs = self.processor(images=imgs, return_tensors="pt")
+        # else:
+        inputs = imgs
+
         if not self.as_linear_classifier:
-            return self.dino_model(**inputs)
+            return self.dino_model(inputs)
         else:
-            features = self.dino_model(**inputs)
+            features = self.dino_model(inputs)
             features = features.last_hidden_state[:, 1:, :].mean(dim=1) # Average pooling excluding CLS token
             return self.head(features)
         
 
-    def transform_img_dino(self, resize_size: int = 224):
-        to_tensor = transforms.ToTensor()
+    def transform_img_dino(self, resize_size: int = 256):
         resize = transforms.Resize((resize_size, resize_size), antialias=True,
                                             interpolation=transforms.InterpolationMode.BICUBIC)
-        # normalize = transforms.Normalize(
-        #     mean=(0.485, 0.456, 0.406),
-        #     std=(0.229, 0.224, 0.225)
-        # )
-        return transforms.Compose([to_tensor, resize]) # , normalize
+        center_crop = transforms.CenterCrop(224)
+        to_tensor = transforms.ToTensor()
+        normalize = transforms.Normalize(
+            mean=(0.485, 0.456, 0.406),
+            std=(0.229, 0.224, 0.225)
+        )
+        return transforms.Compose([resize, center_crop, to_tensor, normalize])
 
 
 class Dinov3FeatureExtractor(nn.Module):
@@ -140,7 +145,7 @@ class Dinov3FeatureExtractor(nn.Module):
         else:
             raise ValueError("Unknown pre-training dataset.")
         
-        self.processor = AutoImageProcessor.from_pretrained(chkpt_dir, use_fast=True)
+        # self.processor = AutoImageProcessor.from_pretrained(chkpt_dir, use_fast=True)
         self.dino_model = AutoModel.from_pretrained(
             chkpt_dir,
             device_map="auto"
@@ -162,7 +167,7 @@ class Dinov3FeatureExtractor(nn.Module):
         if self.pre_ds == "LVD":
             transform_img = self.transform_img_lvd
         elif self.pre_ds == "SAT":
-            transform_img = self.make_transform_sat
+            transform_img = self.transform_img_sat
 
         if isinstance(imgs, List):
             imgs = torch.stack([transform_img()(img).float() for img in imgs]).to(self.device)
@@ -173,32 +178,37 @@ class Dinov3FeatureExtractor(nn.Module):
         else:
             raise ValueError("Input should be a list of PIL Images or a single PIL Image"
                              + " or a torch.Tensor.")
-        
-        inputs = self.processor(images=imgs, return_tensors="pt")
+
+        # if not isinstance(imgs, torch.Tensor):
+        #     inputs = self.processor(images=imgs, return_tensors="pt")
+        # else:
+        inputs = imgs
 
         if not self.as_linear_classifier:
-            return self.dino_model(**inputs)
+            return self.dino_model(inputs)
         else:
-            features = self.dino_model(**inputs)
+            features = self.dino_model(inputs)
             features = features.last_hidden_state[:, 1:, :].mean(dim=1) # Average pooling excluding CLS token
             return self.head(features)
 
-    def transform_img_lvd(self, resize_size: int = 224):
-        to_tensor = transforms.ToTensor()
+    def transform_img_lvd(self, resize_size: int = 256):
         resize = transforms.Resize((resize_size, resize_size), antialias=True,
                                    interpolation=transforms.InterpolationMode.BICUBIC)
+        center_crop = transforms.CenterCrop(224)
+        to_tensor = transforms.ToTensor()
         normalize = transforms.Normalize(
             mean=(0.485, 0.456, 0.406),
             std=(0.229, 0.224, 0.225),
         )
-        return transforms.Compose([to_tensor, resize, normalize])
-    
-    def make_transform_sat(self, resize_size: int = 224):
-        to_tensor = transforms.ToTensor()
+        return transforms.Compose([resize, center_crop, to_tensor, normalize])
+
+    def transform_img_sat(self, resize_size: int = 256):
         resize = transforms.Resize((resize_size, resize_size), antialias=True,
                                    interpolation=transforms.InterpolationMode.BICUBIC)
+        center_crop = transforms.CenterCrop(224)
+        to_tensor = transforms.ToTensor()
         normalize = transforms.Normalize(
             mean=(0.430, 0.411, 0.296),
             std=(0.213, 0.156, 0.143),
         )
-        return transforms.Compose([to_tensor, resize, normalize])
+        return transforms.Compose([resize, center_crop, to_tensor, normalize])

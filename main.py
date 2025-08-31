@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 class DFDDFMTrainer(LTN.LightningModule):
     def __init__(self,
                  model_mode: Literal["SVDDFM", "SVD", "FEAT", "FEAT_LINEAR"] = "SVDDFM",
-                 dfm_model_type: Literal["CLIP", "DINO_V2", "DINO_V3"] | None = "DINO_V3",
+                 model_type: Literal["CLIP", "DINO_V2", "DINO_V3"] | None = "DINO_V3",
                  feat_extractor_type: Literal["CLIP", "DINO_V2", "DINO_V3"] | None = None,
                  model_configs: dict = {},
                  loss_configs: dict = {},
@@ -29,7 +29,7 @@ class DFDDFMTrainer(LTN.LightningModule):
             Initialize the DFDDFMTrainer with the given configurations.
             Params:
                 model_mode: The mode of the model (SVDDFM, SVD, FEAT, FEAT_LINEAR).
-                dfm_model_type: The type of the DFM model (CLIP, DINO_V2, DINO_V3).
+                model_type: The type of the DFM model (CLIP, DINO_V2, DINO_V3).
                 feat_extractor_type: The type of the feature extractor (CLIP, DINO_V2, DINO_V3).
                 model_configs: Configuration dictionary for the model.
                 loss_configs: Configuration dictionary for the loss functions.
@@ -41,7 +41,7 @@ class DFDDFMTrainer(LTN.LightningModule):
         self.do_reconstruction = optim_configs.get("do_reconstruction", False)
         self.use_recon_reg_loss = optim_configs.get("use_recon_reg_loss", False)
         self.use_recon_reg_loss = True if self.do_reconstruction else self.use_recon_reg_loss
-        self.dfm_model_type = dfm_model_type
+        self.model_type = model_type
         self.feat_extractor_type = feat_extractor_type
         self.model_configs = model_configs
         self.loss_configs = loss_configs
@@ -59,21 +59,21 @@ class DFDDFMTrainer(LTN.LightningModule):
             self.model_configs.Dinov2SVDDFM.dfm = True
             self.model_configs.Dinov3SVDDFM.dfm = True
 
-        if self.dfm_model_type == "CLIP":
+        if self.model_type == "CLIP":
             self.model = ClipSVDDFM(self.device, self.model_configs.ClipSVDDFM.dfm,
                                     self.model_configs.ClipSVDDFM.dfm_num_layers,
                                     self.model_configs.ClipSVDDFM.dfm_num_manifolds,
                                     self.model_configs.ClipSVDDFM.dfm_aggr,
                                     self.model_configs.ClipSVDDFM.out_feat_type,
                                     self.model_configs.ClipSVDDFM.chkpt_dir)
-        elif self.dfm_model_type == "DINO_V2":
+        elif self.model_type == "DINO_V2":
             self.model = Dinov2SVDDFM(self.device, self.model_configs.Dinov2SVDDFM.dfm,
                                     self.model_configs.Dinov2SVDDFM.dfm_num_layers,
                                     self.model_configs.Dinov2SVDDFM.dfm_num_manifolds,
                                     self.model_configs.Dinov2SVDDFM.dfm_aggr,
                                     self.model_configs.Dinov2SVDDFM.out_feat_type,
                                     self.model_configs.Dinov2SVDDFM.chkpt_dir)
-        elif self.dfm_model_type == "DINO_V3":
+        elif self.model_type == "DINO_V3":
             self.model = Dinov3SVDDFM(self.device, self.model_configs.Dinov3SVDDFM.dfm,
                                     self.model_configs.Dinov3SVDDFM.dfm_num_layers,
                                     self.model_configs.Dinov3SVDDFM.dfm_num_manifolds,
@@ -130,7 +130,7 @@ class DFDDFMTrainer(LTN.LightningModule):
                    x2_manifold_indices, y_pair
         elif self.model_mode == "SVD":
             x, y = batch
-            y_hat, _, _ = self.model(x)
+            y_hat, _, _, _ = self.model(x)
             return y_hat, y
         elif self.model_mode == "FEAT_LINEAR":
             x, y = batch
@@ -263,13 +263,16 @@ class DFDDFMTrainer(LTN.LightningModule):
                             for remaining_idx in remaining_indices:
                                 aggr_12.append(manifolds_features_2[remaining_idx, :, :])
                             aggr_12 = torch.hstack(aggr_12)
+                            
                             logger.debug(f"aggr_12 shape: {aggr_12.size()}")
                         
                         X_s_hat = self.model.dfm_decoder(aggr_12)
                         f_12 = self.model.dfm_encoder(X_s_hat)
                         S_manifold_idx = self.model.orthogonal_manifolds[manifold_idx](f_12)
                         S_hat = torch.cat((S_hat, S_manifold_idx.unsqueeze(0)), dim=0)
-                    
+
+                    logger.debug(f"S_hat shape: {S_hat.size()}")
+
                     consistency_loss_dict = self.consistency_loss(S_hat, manifolds_features_1)
                     consistency_loss_value = consistency_loss_dict["consistency_loss"]
                     total_loss.update({"consistency_loss": consistency_loss_value})
@@ -383,9 +386,9 @@ class DFDDFMTrainer(LTN.LightningModule):
 
             self.__svd_linear_validation_step__(batch, total_performance, total_loss)
         elif self.model_mode == "FEAT_LINEAR":
-            self.__check_network_grad__(self.model)
+            self.__check_network_grad__(self.feat_extractor)
 
-            self.__feat_linear_validation_step__(batch, total_performance, total_loss)
+            self.__svd_linear_validation_step__(batch, total_performance, total_loss)
 
         val_test_results = total_performance | total_loss
 
