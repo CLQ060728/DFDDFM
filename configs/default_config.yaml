@@ -98,9 +98,9 @@ model:
   inference_configs: {}
 data:
   model_type: 'DINO_V3_SAT'                        # ["CLIP", "DINO_V2", "DINO_V3_LVD", "DINO_V3_SAT"] for image transformations, different models have different types
-  train_dataset_path: ['data/train']
-  val_dataset_path: ['data/val']
-  test_dataset_path: ['data/test']
+  train_dataset_path: ''                           # ['data/train']
+  val_dataset_path: ''                             # ['data/val']
+  test_dataset_path: ''                            # ['data/test']
   manifolds_paths:                                 # List[str] the paths to the manifolds images paths
     - 'REAL'
     - 'SD3'
