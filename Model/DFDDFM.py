@@ -8,7 +8,7 @@ from typing import Literal
 from transformers import CLIPModel, AutoModel
 import math
 import logging
-from BaseSVDDFM import BaseSVDDFM
+from Model.BaseSVDDFM import BaseSVDDFM
 
 
 logger = logging.getLogger(__name__)

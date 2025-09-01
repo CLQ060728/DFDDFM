@@ -6,7 +6,7 @@ from torch import nn, Tensor
 import torch.nn.functional as F
 from typing import Literal
 from Model.DFDDFM import SVDResidualLinear, ClipSVDDFM, Dinov2SVDDFM, Dinov3SVDDFM
-from BaseLoss import BaseLoss
+from Loss.BaseLoss import BaseLoss
 import logging
 
 logger = logging.getLogger(__name__)

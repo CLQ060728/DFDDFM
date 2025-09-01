@@ -12,7 +12,7 @@ from Model.FeatureExtractors import ClipFeatureExtractor, Dinov2FeatureExtractor
 from Loss.DFDDFMLosses import DFDLoss, ReconstructionLoss, SVDLoss, ConsistencyLoss, DistanceLoss
 from Loss.DFDDFMLosses import SparsityLoss, ReconRegLoss
 from Dataset.DatasetLoader import DFDDFMTrainDataModule
-import logging
+import logging, os
 
 logger = logging.getLogger(__name__)
 
@@ -63,21 +63,18 @@ class DFDDFMTrainer(LTN.LightningModule):
         if self.model_type == "CLIP":
             self.model = ClipSVDDFM(self.device, self.model_configs.ClipSVDDFM.dfm,
                                     self.model_configs.ClipSVDDFM.dfm_num_layers,
-                                    self.model_configs.ClipSVDDFM.dfm_num_manifolds,
                                     self.model_configs.ClipSVDDFM.dfm_aggr,
                                     self.model_configs.ClipSVDDFM.out_feat_type,
                                     self.model_configs.ClipSVDDFM.chkpt_dir)
         elif self.model_type == "DINO_V2":
             self.model = Dinov2SVDDFM(self.device, self.model_configs.Dinov2SVDDFM.dfm,
                                     self.model_configs.Dinov2SVDDFM.dfm_num_layers,
-                                    self.model_configs.Dinov2SVDDFM.dfm_num_manifolds,
                                     self.model_configs.Dinov2SVDDFM.dfm_aggr,
                                     self.model_configs.Dinov2SVDDFM.out_feat_type,
                                     self.model_configs.Dinov2SVDDFM.chkpt_dir)
         elif self.model_type == "DINO_V3":
             self.model = Dinov3SVDDFM(self.device, self.model_configs.Dinov3SVDDFM.dfm,
                                     self.model_configs.Dinov3SVDDFM.dfm_num_layers,
-                                    self.model_configs.Dinov3SVDDFM.dfm_num_manifolds,
                                     self.model_configs.Dinov3SVDDFM.dfm_aggr,
                                     self.model_configs.Dinov3SVDDFM.out_feat_type,
                                     self.model_configs.Dinov3SVDDFM.model_type,
@@ -463,6 +460,8 @@ def cli_main():
 
 
 if __name__ == "__main__":
+    os.makedirs("./logs", exist_ok=True)
+    os.makedirs("./output", exist_ok=True)
     logging.basicConfig(filename='./logs/main.log', level=logging.INFO)
     # configure logging at the root level of lightning
     logging.getLogger("pytorch_lightning").setLevel(logging.INFO)

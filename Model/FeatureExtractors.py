@@ -1,7 +1,7 @@
 # Author: Qian Liu
 # Email: liu.qian.pro@gmail.com
 
-from typing import List
+from typing import List, Literal
 import torch
 import torch.nn as nn
 from torchvision import transforms
@@ -128,12 +128,13 @@ class Dinov2FeatureExtractor(nn.Module):
 
 
 class Dinov3FeatureExtractor(nn.Module):
-    def __init__(self, device: torch.device, pre_ds: str = "LVD", as_linear_classifier: bool = False,
+    def __init__(self, device: torch.device, pre_ds: Literal["LVD", "SAT"] = "LVD",
+                 as_linear_classifier: bool = False,
                  chkpt_dir: str="./pre_trained/DINO_V3/"):
         """
         params:
             device: torch.device, device to run the model on
-            pre_ds: str, pre-training dataset, defaults to "LVD-1689M", the other is "SAT-493M"
+            pre_ds: Literal["LVD", "SAT"], pre-training dataset, defaults to "LVD-1689M", the other is "SAT-493M"
             as_linear_classifier: bool, whether to use the model as a linear classifier
             chkpt_dir: str, directory of the pre-trained DINO V3 model
         """

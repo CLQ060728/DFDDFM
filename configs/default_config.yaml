@@ -1,0 +1,112 @@
+# lightning.pytorch==2.5.3
+seed_everything: 88
+trainer:
+  accelerator: auto
+  strategy: auto
+  devices: auto
+  num_nodes: 1
+  precision: null
+  logger: null
+  callbacks: null
+  fast_dev_run: false
+  max_epochs: 100
+  min_epochs: null
+  max_steps: -1
+  min_steps: null
+  max_time: null
+  limit_train_batches: null
+  limit_val_batches: null
+  limit_test_batches: null
+  limit_predict_batches: null
+  overfit_batches: 0.0
+  val_check_interval: null
+  check_val_every_n_epoch: 1
+  num_sanity_val_steps: null
+  log_every_n_steps: 10
+  enable_checkpointing: null
+  enable_progress_bar: True
+  enable_model_summary: null
+  accumulate_grad_batches: 1
+  gradient_clip_val: null
+  gradient_clip_algorithm: null
+  deterministic: null
+  benchmark: null
+  inference_mode: true
+  use_distributed_sampler: true
+  profiler: null
+  detect_anomaly: false
+  barebones: false
+  plugins: null
+  sync_batchnorm: false
+  reload_dataloaders_every_n_epochs: 0
+  default_root_dir: './output/'
+  model_registry: null
+model:
+  model_mode: SVDDFM
+  model_type: DINO_V3
+  feat_extractor_type: None
+  model_configs: 
+    ClipSVDDFM:
+      dfm: True                                    # whether to train the disentangled fake manifolds
+      dfm_num_layers: 2                            # the number of layers for the manifold network
+      dfm_aggr: 'SUM'                              # ['SUM', 'CONCAT'], the aggregation method for the manifold features
+      out_feat_type: 'HIDDEN'                      # ['HIDDEN', 'CLS'], the latent feature to use for pretrained ViT models          
+      chkpt_dir: './pre_trained/OPENAI_CLIP/'      # the root chkpt path for the pretrained CLIP model
+    Dinov2SVDDFM:
+      dfm: True                                    # whether to train the disentangled fake manifolds
+      dfm_num_layers: 2                            # the number of layers for the manifold network
+      dfm_aggr: 'SUM'                              # ['SUM', 'CONCAT'], the aggregation method for the manifold features
+      out_feat_type: 'HIDDEN'                      # ['HIDDEN', 'CLS'], the latent feature to use for pretrained ViT models
+      chkpt_dir: './pre_trained/META_DINOV2/'      # the root chkpt path for the pretrained DINOV2 model
+    Dinov3SVDDFM:
+      dfm: True                                    # whether to train the disentangled fake manifolds
+      dfm_num_layers: 2                            # the number of layers for the manifold network
+      dfm_aggr: 'SUM'                              # ['SUM', 'CONCAT'], the aggregation method for the manifold features
+      out_feat_type: 'HIDDEN'                      # ['HIDDEN', 'CLS'], the latent feature to use for pretrained ViT models
+      model_type: 'LVD'                            # ['LVD', 'SAT'], the pretrain datasets for DINOV3 models, "LVD-1689M" or "SAT-493M"
+      chkpt_dir: './pre_trained/META_DINOV3/'      # the chkpt path for the pretrained DINOV3 model
+    ClipFeatureExtractor:
+      as_linear_classifier: False                  # whether to use a linear classifier on top of frozen CLIP features
+      chkpt_dir: './pre_trained/OPENAI_CLIP/'      # the root chkpt path for the pretrained CLIP model
+    Dinov2FeatureExtractor:
+      as_linear_classifier: False                  # whether to use a linear classifier on top of frozen DINOV2 features
+      chkpt_dir: './pre_trained/META_DINOV2/'      # the root chkpt path for the pretrained DINOV2 model
+    Dinov3FeatureExtractor:
+      pre_ds: 'LVD'                                # ['LVD', 'SAT'], the pretrain datasets for DINOV3 models, "LVD-1689M" or "SAT-493M"
+      as_linear_classifier: False                  # whether to use a linear classifier on top of frozen DINOV3 features
+      chkpt_dir: './pre_trained/META_DINOV3/'      # the root chkpt path for the pretrained DINOV3 model
+  loss_configs:
+    DFDLoss:                                       # Deep Fake Detection loss
+      coef: 1.0                                    # weight of this loss function during training
+    SVDLoss:                                       # Singular Value Decomposition losses, including Orthogonal loss and Keeping Singular Values loss
+      coef: 1.0                                    # weight of this loss function during training
+    ReconstructionLoss:                            # Reconstruction loss
+      coef: 0.1                                    # weight of this loss function during training
+    ReconRegLoss:                                  # Reconstruction Regularization loss
+      beta_3_max: 0.1                              # maximum weight value during training, decaying during training
+    DistanceSparcity:                              
+      beta_1_start: 0.01                           # starting value to scale coefficient for distance and sparcity losses training
+      beta_1_end: 0.1                              # max value to scale coefficient for distance and sparcity losses training
+    ConsistencyLoss:
+      beta_2_max: 0.1                              # max value to scale coefficient for consistency loss during training
+  optim_configs:                                   # configurations for optimization
+    learning_rate: 2e-4                            # learning_rate for training
+    do_reconstruction: True                        # whether to use latent space encoder-decoder feature reconstruction loss
+    use_recon_reg_loss: True                       # whether to use regularization loss function during training to avoid disentangled manifolds crashing
+    dfm_start_epoch: 51                            # starting epoches to train the disentangled fake manifolds
+    dissparcons_start_epoch: 61                    # starting epoches to use distance,  sparcity and consistency losses and also the regularization loss when it's enabled
+  inference_configs: {}
+data:
+  model_type: 'DINO_V3_SAT'                        # ["CLIP", "DINO_V2", "DINO_V3_LVD", "DINO_V3_SAT"] for image transformations, different models have different types
+  train_dataset_path: ['data/train']
+  val_dataset_path: ['data/val']
+  test_dataset_path: ['data/test']
+  manifolds_paths:                                 # List[str] the paths to the manifolds images paths
+    - 'REAL'
+    - 'SD3'
+  manifolds_labels:                                # List[int] labels for the deep fake detection
+    - 0
+    - 1
+  batch_size: 120
+  num_workers: 2                                   # number of workers for data loading
+
