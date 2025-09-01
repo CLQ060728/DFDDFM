@@ -202,7 +202,7 @@ class DFDDFMTrainDataModule(LTN.LightningDataModule):
                  test_dataset_path: str,
                  manifolds_paths: List[str],
                  batch_size: int = 120,
-                 num_workers: int = 8):
+                 num_workers: int = 2):
         """
         Initialize the DFDDFMTrainDataModule with the given dataset paths.
         Params:
@@ -213,10 +213,14 @@ class DFDDFMTrainDataModule(LTN.LightningDataModule):
             num_workers: int The number of workers for the dataloaders.
         """
         super(DFDDFMTrainDataModule, self).__init__()
-        
-        assert train_dataset_path.endswith("TRAIN") or train_dataset_path.endswith("train"), f"Invalid train dataset path {train_dataset_path}"
-        assert val_dataset_path.endswith("VAL") or val_dataset_path.endswith("val"), f"Invalid val dataset path {val_dataset_path}"
-        assert test_dataset_path.endswith("TEST") or test_dataset_path.endswith("test"), f"Invalid test dataset path {test_dataset_path}"
+
+        assert not (train_dataset_path is None and val_dataset_path is None and test_dataset_path is None), "At least one of train_dataset_path, val_dataset_path, test_dataset_path must be provided."
+        if not train_dataset_path:
+            assert train_dataset_path.endswith("TRAIN") or train_dataset_path.endswith("train"), f"Invalid train dataset path {train_dataset_path}"
+        if not val_dataset_path:
+            assert val_dataset_path.endswith("VAL") or val_dataset_path.endswith("val"), f"Invalid val dataset path {val_dataset_path}"
+        if not test_dataset_path:
+            assert test_dataset_path.endswith("TEST") or test_dataset_path.endswith("test"), f"Invalid test dataset path {test_dataset_path}"
 
         self.train_dataset_path = train_dataset_path
         self.val_dataset_path = val_dataset_path
@@ -228,10 +232,16 @@ class DFDDFMTrainDataModule(LTN.LightningDataModule):
 
     def setup(self, stage=None):
         if stage == "fit":
+            assert self.train_dataset_path is not None, "train_dataset_path must be provided for fit"
+
             self.train_dataset = DFDDFMDataset(self.model_type, self.train_dataset_path, self.manifolds_paths)
-        if stage == "validate":
-            self.val_dataset = DFDDFMDataset(self.model_type, self.val_dataset_path, self.manifolds_paths)
+            if self.val_dataset_path is not None:
+                self.val_dataset = DFDDFMDataset(self.model_type, self.val_dataset_path, self.manifolds_paths)
+        # if stage == "validate":
+        #     self.val_dataset = DFDDFMDataset(self.model_type, self.val_dataset_path, self.manifolds_paths)
         if stage == "test":
+            assert self.test_dataset_path is not None, "test_dataset_path must be provided for test"
+            
             self.test_dataset = DFDDFMDataset(self.model_type, self.test_dataset_path, self.manifolds_paths)
 
     def train_dataloader(self):
