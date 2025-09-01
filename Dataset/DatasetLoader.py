@@ -126,9 +126,9 @@ class DFDDFMDataset(Dataset):
         img_path_1, img_path_2 = self.data[idx]
         assert img_path_1 is not None and img_path_2 is not None, "Image paths cannot be None"
         assert img_path_1.endswith(".jpg") or img_path_1.endswith(".jpeg") or img_path_1.endswith(".png"),\
-               "Image path must end with .jpg or .png"
+               "Image path must end with .jpg, .jpeg or .png"
         assert img_path_2.endswith(".jpg") or img_path_2.endswith(".jpeg") or img_path_2.endswith(".png"),\
-               "Image path must end with .jpg or .png"
+               "Image path must end with .jpg, .jpeg or .png"
 
         label_1, label_2 = self.labels[idx]
         img_1 = Image.open(img_path_1).convert("RGB")

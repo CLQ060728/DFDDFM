@@ -11,7 +11,7 @@ from Model.DFDDFM import ClipSVDDFM, Dinov2SVDDFM, Dinov3SVDDFM
 from Model.FeatureExtractors import ClipFeatureExtractor, Dinov2FeatureExtractor, Dinov3FeatureExtractor
 from Loss.DFDDFMLosses import DFDLoss, ReconstructionLoss, SVDLoss, ConsistencyLoss, DistanceLoss
 from Loss.DFDDFMLosses import SparsityLoss, ReconRegLoss
-from Dataset.DataLoader import DFDDFMTrainDataModule
+from Dataset.DatasetLoader import DFDDFMTrainDataModule
 import logging
 
 logger = logging.getLogger(__name__)
@@ -153,7 +153,7 @@ class DFDDFMTrainer(LTN.LightningModule):
         dfd_loss_value_1 = dfd_loss_dict_1["dfd_loss"]
         dfd_loss_value_2 = dfd_loss_dict_2["dfd_loss"]
         total_loss.update({"dfd_loss": (dfd_loss_value_1 + dfd_loss_value_2)})
-        if self.model_mode != "FEAT_LINEAR" or self.model_mode != "FEAT":
+        if self.model_mode != "FEAT_LINEAR" and self.model_mode != "FEAT":
             svd_losses_dict = self.svd_loss(self.model)
             svd_losses_value = svd_losses_dict["svd_losses_orth_keepsv"]
             total_loss.update({"svd_losses": svd_losses_value})
@@ -177,9 +177,13 @@ class DFDDFMTrainer(LTN.LightningModule):
             self.__check_network_grad__(self.model)
 
             if self.current_epoch < self.optim_configs.dfm_start_epoch:
+
+                logger.debug(f"Switching model mode from SVDDFM to SVD")
+
                 self.model_mode = "SVD"
                 self.model.dfm = False
-                
+
+                logger.debug(f"Model type set to: {self.model_type}; Model DFM set to: {self.model.dfm}")
                 logger.debug(f"total_loss before __svd_linear_training_step__: {total_loss}")
 
                 self.__svd_linear_training_step__(batch, total_loss)
@@ -190,6 +194,7 @@ class DFDDFMTrainer(LTN.LightningModule):
                 self.model.dfm = True
 
                 self.log_dict(total_loss, prog_bar=True)
+                logger.debug(f"Model type set to: {self.model_type}; Model DFM set to: {self.model.dfm}")
             else:
                 y_hat_1, encoder_features_1, decoder_features_1, manifolds_features_1,\
                 y_hat_2, encoder_features_2, decoder_features_2, manifolds_features_2,\
@@ -234,6 +239,11 @@ class DFDDFMTrainer(LTN.LightningModule):
                     self.sparsity_loss.set_coef(beta_1)
                     self.consistency_loss.set_coef(beta_2)
                     self.recon_reg_loss.set_coef(beta_3)
+
+                    logger.debug(f"Distance loss coefficient set to: {self.distance_loss.coef}")
+                    logger.debug(f"Sparsity loss coefficient set to: {self.sparsity_loss.coef}")
+                    logger.debug(f"Consistency loss coefficient set to: {self.consistency_loss.coef}")
+                    logger.debug(f"Reconstruction regularization loss coefficient set to: {self.recon_reg_loss.coef}")
 
                     distance_loss_dict = self.distance_loss(manifolds_features_1, manifolds_features_2,
                                                             x2_manifold_indices)
@@ -421,7 +431,7 @@ class DFDDFMTrainer(LTN.LightningModule):
         dfd_loss_value_2 = dfd_loss_dict_2["dfd_loss"]
         total_loss.update({"dfd_loss": (dfd_loss_value_1 + dfd_loss_value_2)})
         # compute svd loss
-        if self.model_mode != "FEAT_LINEAR" or self.model_mode != "FEAT":
+        if self.model_mode != "FEAT_LINEAR" and self.model_mode != "FEAT":
             svd_losses_dict = self.svd_loss(self.model)
             svd_losses_value = svd_losses_dict["svd_losses_orth_keepsv"]
             total_loss.update({"svd_losses": svd_losses_value})
