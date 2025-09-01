@@ -195,19 +195,53 @@ class DFDDFMDataset(Dataset):
 
 
 class DFDDFMTrainDataModule(LTN.LightningDataModule):
-    def __init__(self, train_dataset, val_dataset, test_dataset, batch_size=32, num_workers=4):
+    def __init__(self, 
+                 model_type: Literal["CLIP", "DINO_V2", "DINO_V3_LVD", "DINO_V3_SAT"],
+                 train_dataset_path: str,
+                 val_dataset_path: str,
+                 test_dataset_path: str,
+                 manifolds_paths: List[str],
+                 batch_size: int = 120,
+                 num_workers: int = 8):
+        """
+        Initialize the DFDDFMTrainDataModule with the given dataset paths.
+        Params:
+            train_dataset_path: str The path to the training dataset.
+            val_dataset_path: str The path to the validation dataset.
+            test_dataset_path: str The path to the test dataset.
+            batch_size: int The batch size for the dataloaders.
+            num_workers: int The number of workers for the dataloaders.
+        """
         super(DFDDFMTrainDataModule, self).__init__()
-        self.train_dataset = train_dataset
-        self.val_dataset = val_dataset
-        self.test_dataset = test_dataset
+        
+        assert train_dataset_path.endswith("TRAIN") or train_dataset_path.endswith("train"), f"Invalid train dataset path {train_dataset_path}"
+        assert val_dataset_path.endswith("VAL") or val_dataset_path.endswith("val"), f"Invalid val dataset path {val_dataset_path}"
+        assert test_dataset_path.endswith("TEST") or test_dataset_path.endswith("test"), f"Invalid test dataset path {test_dataset_path}"
+
+        self.train_dataset_path = train_dataset_path
+        self.val_dataset_path = val_dataset_path
+        self.test_dataset_path = test_dataset_path
+        self.model_type = model_type
+        self.manifolds_paths = manifolds_paths
         self.batch_size = batch_size
         self.num_workers = num_workers
 
+    def setup(self, stage=None):
+        if stage == "fit":
+            self.train_dataset = DFDDFMDataset(self.model_type, self.train_dataset_path, self.manifolds_paths)
+        if stage == "validate":
+            self.val_dataset = DFDDFMDataset(self.model_type, self.val_dataset_path, self.manifolds_paths)
+        if stage == "test":
+            self.test_dataset = DFDDFMDataset(self.model_type, self.test_dataset_path, self.manifolds_paths)
+
     def train_dataloader(self):
-        return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
+        return DataLoader(self.train_dataset, batch_size=self.batch_size,
+                          shuffle=True, num_workers=self.num_workers)
 
     def val_dataloader(self):
-        return DataLoader(self.val_dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers)
+        return DataLoader(self.val_dataset, batch_size=self.batch_size,
+                          shuffle=False, num_workers=self.num_workers)
 
     def test_dataloader(self):
-        return DataLoader(self.test_dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers)
+        return DataLoader(self.test_dataset, batch_size=self.batch_size,
+                          shuffle=False, num_workers=self.num_workers)
