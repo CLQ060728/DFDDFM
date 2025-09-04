@@ -47,8 +47,8 @@ class DFDDFMDataset(Dataset):
         logger.debug(f"{manifolds_paths[1]} images paths shape: {mani_1_imgs_paths.shape}")
 
         assert len(mani_0_imgs_paths) == len(mani_1_imgs_paths) and len(mani_0_imgs_paths) % 2 == 0, \
-            f"{manifolds_paths[0]} and {manifolds_paths[1]} images must have the same number of images "
-            + f"(even number), but got {len(mani_0_imgs_paths)} and {len(mani_1_imgs_paths)}."
+            f"{manifolds_paths[0]} and {manifolds_paths[1]} images must have the same number of images "\
+          + f"(even number), but got {len(mani_0_imgs_paths)} and {len(mani_1_imgs_paths)}."
 
         pair_indices_length = len(mani_0_imgs_paths) // 2
         mani_0_random_indices = np.array(torch.multinomial(torch.arange(len(mani_0_imgs_paths)),
