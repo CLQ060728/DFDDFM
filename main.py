@@ -148,9 +148,13 @@ class DFDDFMTrainer(LTN.LightningModule):
         y_hat_2, y_2 = self(batch_2)
         dfd_loss_dict_1 = self.dfd_loss(y_hat_1, y_1)
         dfd_loss_dict_2 = self.dfd_loss(y_hat_2, y_2)
+
+        logger.debug(f"dfd_loss_dict_1: {dfd_loss_dict_1}")
+        logger.debug(f"dfd_loss_dict_2: {dfd_loss_dict_2}")
+
         dfd_loss_value_1 = dfd_loss_dict_1["dfd_loss"]
         dfd_loss_value_2 = dfd_loss_dict_2["dfd_loss"]
-        total_loss.update({"dfd_loss": (dfd_loss_value_1 + dfd_loss_value_2)})
+        total_loss.update({"dfd_loss": (dfd_loss_value_1 + dfd_loss_value_2) / 2})
         if self.model_mode != "FEAT_LINEAR" and self.model_mode != "FEAT":
             svd_losses_dict = self.svd_loss(self.model)
             svd_losses_value = svd_losses_dict["svd_losses_orth_keepsv"]
@@ -204,7 +208,7 @@ class DFDDFMTrainer(LTN.LightningModule):
                 dfd_loss_dict_2 = self.dfd_loss(y_hat_2, y_2)
                 dfd_loss_value_1 = dfd_loss_dict_1["dfd_loss"]
                 dfd_loss_value_2 = dfd_loss_dict_2["dfd_loss"]
-                total_loss.update({"dfd_loss": (dfd_loss_value_1 + dfd_loss_value_2)})
+                total_loss.update({"dfd_loss": (dfd_loss_value_1 + dfd_loss_value_2) / 2})
                 svd_losses_dict = self.svd_loss(self.model)
                 svd_losses_value = svd_losses_dict["svd_losses_orth_keepsv"]
                 total_loss.update({"svd_losses": svd_losses_value})
@@ -215,7 +219,7 @@ class DFDDFMTrainer(LTN.LightningModule):
                     recon_loss_dict_2 = self.recon_loss(decoder_features_2, encoder_features_2)
                     recon_loss_value_1 = recon_loss_dict_1[f"reconstruction_loss_{self.recon_loss.loss_type}"]
                     recon_loss_value_2 = recon_loss_dict_2[f"reconstruction_loss_{self.recon_loss.loss_type}"]
-                    total_loss.update({"recon_loss": (recon_loss_value_1 + recon_loss_value_2)})
+                    total_loss.update({"recon_loss": (recon_loss_value_1 + recon_loss_value_2) / 2})
                     
                     if self.current_epoch < self.optim_configs.dissparcons_start_epoch:
                         recon_reg_loss_dict = self.recon_reg_loss(manifolds_features_1, manifolds_features_2)
@@ -465,10 +469,10 @@ if __name__ == "__main__":
     os.makedirs("./output", exist_ok=True)
     logging.basicConfig(filename='./logs/main.log', level=logging.DEBUG)
     # configure logging at the root level of lightning
-    logging.getLogger("pytorch_lightning").setLevel(logging.INFO)
+    # logging.getLogger("pytorch_lightning").setLevel(logging.INFO)
 
     # configure logging on module level, redirect to file
-    logger = logging.getLogger("pytorch_lightning.core")
-    logger.addHandler(logging.FileHandler("./logs/ltn_core.log"))
+    # logger = logging.getLogger("pytorch_lightning.core")
+    # logger.addHandler(logging.FileHandler("./logs/ltn_core.log"))
 
     cli_main()

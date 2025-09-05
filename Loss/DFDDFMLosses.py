@@ -29,8 +29,7 @@ class DFDLoss(BaseLoss):
 
     def __call__(self,
                  logits: Tensor,
-                 targets: Tensor,
-                 name: str = None
+                 targets: Tensor
     ):
         """
         Compute the DFD loss for a given DFDDFM model.
@@ -38,14 +37,13 @@ class DFDLoss(BaseLoss):
         Args:
             predictions (Tensor): The predicted logits from the model.
             targets (Tensor): The ground truth labels.
-            name (str): The name of the loss function.
 
         Returns:
             dict: Dictionary containing the DFD loss value.
         """
         loss = self.loss_function(F.sigmoid(logits), targets, reduction='none')
 
-        return self.return_loss(name, loss)
+        return self.return_loss(self.name, loss)
 
 
 class SVDLoss(BaseLoss):
@@ -72,16 +70,13 @@ class SVDLoss(BaseLoss):
         self.name = f"{name}_losses_orth_keepsv"
     
     def __call__(self,
-                 dfddfm_model,
-                 name: str = None
+                 dfddfm_model
     ):
         """
         Compute the orthogonal and keepsv losses for a given DFDDFM model.
 
         Args:
             dfddfm_model: The DFDDFM model to compute the losses for.
-            name (str): The name of the loss function.
-
         Returns:
             dict: Dictionary containing the orthogonal and keepsv losses values.
         """
@@ -148,12 +143,11 @@ class SVDLoss(BaseLoss):
                                         num_reg += 1
         
         loss = reg_term / num_reg
+        loss = torch.nan_to_num(loss, nan=0.0, posinf=0.0, neginf=0.0)
 
         logger.debug(f"number of svd loss layers: {num_reg}; final loss: {loss}")
 
-        name = self.name if name is None else name
-
-        return self.return_loss(name, loss)
+        return self.return_loss(self.name, loss)
 
     def __compute_orthogonal_loss__(self, svd_residual_layer: SVDResidualLinear):
         if svd_residual_layer.S_residual is not None:
@@ -230,8 +224,7 @@ class ReconstructionLoss(BaseLoss):
     def __call__(
         self,
         decoder_features: Tensor,
-        encoder_features: Tensor,
-        name: str = None
+        encoder_features: Tensor
     ):
         """
         Compute the loss between the predicted and ground truth values.
@@ -239,16 +232,13 @@ class ReconstructionLoss(BaseLoss):
         Args:
             decoder_features (Tensor): The predicted values.
             encoder_features (Tensor): The ground truth values.
-            name (str): The name of the loss function.
-
         Returns:
             dict: Dictionary containing the reconstruction loss value.
         """
         encoder_features, decoder_features = encoder_features.squeeze(), decoder_features.squeeze()
         loss = self.loss_fn(decoder_features, encoder_features, reduction="none")
-        name = self.name if name is None else name
-
-        return self.return_loss(name, loss)
+        
+        return self.return_loss(self.name, loss)
 
 
 class DistanceLoss(BaseLoss):
@@ -276,8 +266,7 @@ class DistanceLoss(BaseLoss):
     def __call__(self,
                  manifolds_features1: Tensor,
                  manifolds_features2: Tensor,
-                 manifolds_indices2: Tensor,
-                 name: str = None
+                 manifolds_indices2: Tensor
     ):
         """
         Compute the distance loss for disentangled manifolds.
@@ -286,8 +275,6 @@ class DistanceLoss(BaseLoss):
             manifolds_features1 (Tensor): The predicted single disentangled manifold features.
             manifolds_features2 (Tensor): The original single disentangled manifold features.
             manifolds_indices2 (Tensor): The indices of the disentangled manifolds to disentangle.
-            name (str): The name of the loss function.
-
         Returns:
             dict: Dictionary containing the distance loss value.
         """
@@ -304,9 +291,7 @@ class DistanceLoss(BaseLoss):
 
         logger.debug(f"loss shape: {loss.size()}; min value: {loss.min()}; max value: {loss.max()};")
 
-        name = self.name if name is None else name
-
-        return self.return_loss(name, loss)
+        return self.return_loss(self.name, loss)
 
 
 class SparsityLoss(BaseLoss):
@@ -333,8 +318,7 @@ class SparsityLoss(BaseLoss):
 
     def __call__(self,
                  manifolds_features1: Tensor,
-                 manifolds_features2: Tensor,
-                 name: str = None
+                 manifolds_features2: Tensor
     ):
         """
         Compute the sparsity loss for disentangled manifolds.
@@ -342,8 +326,6 @@ class SparsityLoss(BaseLoss):
         Args:
             manifolds_features1 (Tensor): The predicted single disentangled manifold features.
             manifolds_features2 (Tensor): The original single disentangled manifold features.
-            name (str): The name of the loss function.
-
         Returns:
             dict: Dictionary containing the sparsity loss value.
         """
@@ -367,9 +349,7 @@ class SparsityLoss(BaseLoss):
 
         logger.debug(f"loss shape: {loss.size()}; min value: {loss.min()}; max value: {loss.max()};")
 
-        name = self.name if name is None else name
-
-        return self.return_loss(name, loss)
+        return self.return_loss(self.name, loss)
 
 
 class ConsistencyLoss(BaseLoss):
@@ -397,8 +377,7 @@ class ConsistencyLoss(BaseLoss):
 
     def __call__(self,
                  S_hat: Tensor,
-                 S_original: Tensor,
-                 name: str = None
+                 S_original: Tensor
     ):
         """
         Compute the consistency loss for a given SVDResidualLinear layer.
@@ -406,15 +385,12 @@ class ConsistencyLoss(BaseLoss):
         Args:
             S_hat (Tensor): The predicted disentangled manifolds features.
             S_original (Tensor): The original disentangled manifolds features.
-            name (str): The name of the loss function.
-
         Returns:
             dict: Dictionary containing the consistency loss value.
         """
         loss = self.loss_fn(S_hat, S_original, reduction='none')
-        name = self.name if name is None else name
 
-        return self.return_loss(name, loss)
+        return self.return_loss(self.name, loss)
 
 
 class ReconRegLoss(BaseLoss):
@@ -441,8 +417,7 @@ class ReconRegLoss(BaseLoss):
 
     def __call__(self,
                  manifolds_features1: Tensor,
-                 manifolds_features2: Tensor,
-                 name: str = None
+                 manifolds_features2: Tensor
     ):
         """
         Compute the reconstruction regularization loss for disentangled manifolds.
@@ -450,8 +425,6 @@ class ReconRegLoss(BaseLoss):
         Args:
             manifolds_features1 (Tensor): The disentangled manifolds features for the first input.
             manifolds_features2 (Tensor): The disentangled manifolds features for the second input.
-            name (str): The name of the loss function.
-
         Returns:
             dict: Dictionary containing the reconstruction regularization loss value.
         """
@@ -470,6 +443,4 @@ class ReconRegLoss(BaseLoss):
 
         logger.debug(f"loss shape: {loss.size()}; loss: {loss}")
 
-        name = self.name if name is None else name
-
-        return self.return_loss(name, loss)
+        return self.return_loss(self.name, loss)

@@ -82,6 +82,7 @@ model:
       coef: 1.0                                    # weight of this loss function during training
     ReconstructionLoss:                            # Reconstruction loss
       coef: 0.1                                    # weight of this loss function during training
+      loss_type: 'l2'                              # ['l1', 'smooth_l1', 'l2'], the type of reconstruction loss function
     ReconRegLoss:                                  # Reconstruction Regularization loss
       beta_3_max: 0.1                              # maximum weight value during training, decaying during training
     DistanceSparcity:                              
@@ -97,17 +98,14 @@ model:
     dissparcons_start_epoch: 7                    # starting epoches to use distance,  sparcity and consistency losses and also the regularization loss when it's enabled
   inference_configs: {}
 data:
-  model_type: 'DINO_V3_LVD'                        # ["CLIP", "DINO_V2", "DINO_V3_LVD", "DINO_V3_SAT"] for image transformations, different models have different types
-  train_dataset_path: 'data/train/'                           # ['data/train']
-  val_dataset_path: 'data/val/'                             # ['data/val']
-  test_dataset_path: 'data/test/'                           # ['data/test']
-  manifolds_paths:                                 # List[str] the paths to the manifolds images paths
+  model_type: 'DINO_V3_LVD'                                  # ["CLIP", "DINO_V2", "DINO_V3_LVD", "DINO_V3_SAT"] for image transformations, different models have different types
+  train_dataset_path: '/root/WORKSPACE/DFDDFM/data/train/'   # ['data/train']
+  val_dataset_path: '/root/WORKSPACE/DFDDFM/data/val/'       # ['data/val']
+  test_dataset_path: '/root/WORKSPACE/DFDDFM/data/test/'     # ['data/test']
+  manifolds_paths:                                           # List[str] the paths to the manifolds images paths
     - 'Real'
     - 'Midjourney'
-  manifolds_labels:                                # List[int] labels for the deep fake detection
-    - 0
-    - 2
-  manifolds_indices_path: 'data/manifolds_indices.json' # str The path to the mapping of the corresponding manifolds' indices.
+  manifolds_indices_path: 'data/manifolds_indices_1.json' # str The path to the mapping of the corresponding manifolds' indices.
   batch_size: 100
   num_workers: 2                                   # number of workers for data loading
 
