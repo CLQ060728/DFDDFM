@@ -1,7 +1,7 @@
 # Author: Qian Liu
 # Email: liu.qian.pro@gmail.com
 
-from typing import Literal, List
+from typing import Literal, List, Dict, Any
 from PIL.Image import Image
 import torch
 import lightning as LTN
@@ -12,6 +12,7 @@ from Model.FeatureExtractors import ClipFeatureExtractor, Dinov2FeatureExtractor
 from Loss.DFDDFMLosses import DFDLoss, ReconstructionLoss, SVDLoss, ConsistencyLoss, DistanceLoss
 from Loss.DFDDFMLosses import SparsityLoss, ReconRegLoss
 from Dataset.DatasetLoader import DFDDFMTrainDataModule
+from Utils.UtilFunctions import ConfigDict
 import logging, os
 
 logger = logging.getLogger(__name__)
@@ -22,10 +23,10 @@ class DFDDFMTrainer(LTN.LightningModule):
                  model_mode: Literal["SVDDFM", "SVD", "FEAT", "FEAT_LINEAR"] = "SVDDFM",
                  model_type: Literal["CLIP", "DINO_V2", "DINO_V3"] | None = "DINO_V3",
                  feat_extractor_type: Literal["CLIP", "DINO_V2", "DINO_V3"] | None = None,
-                 model_configs: dict = {},
-                 loss_configs: dict = {},
-                 optim_configs: dict = {},
-                 inference_configs: dict = {}):
+                 model_configs: Dict[str, Any] = {},
+                 loss_configs: Dict[str, Any] = {},
+                 optim_configs: Dict[str, Any] = {},
+                 inference_configs: Dict[str, Any] = {}):
         """
             Initialize the DFDDFMTrainer with the given configurations.
             Params:
@@ -44,10 +45,10 @@ class DFDDFMTrainer(LTN.LightningModule):
         self.use_recon_reg_loss = True if self.do_reconstruction else self.use_recon_reg_loss
         self.model_type = model_type
         self.feat_extractor_type = feat_extractor_type
-        self.model_configs = model_configs
-        self.loss_configs = loss_configs
-        self.optim_configs = optim_configs
-        self.inference_configs = inference_configs
+        self.model_configs = ConfigDict(model_configs)
+        self.loss_configs = ConfigDict(loss_configs)
+        self.optim_configs = ConfigDict(optim_configs)
+        self.inference_configs = ConfigDict(inference_configs)
         self.__get_all_training_objects__()  # Initialize model and losses
 
     def __get_all_training_objects__(self):
@@ -462,7 +463,7 @@ def cli_main():
 if __name__ == "__main__":
     os.makedirs("./logs", exist_ok=True)
     os.makedirs("./output", exist_ok=True)
-    logging.basicConfig(filename='./logs/main.log', level=logging.INFO)
+    logging.basicConfig(filename='./logs/main.log', level=logging.DEBUG)
     # configure logging at the root level of lightning
     logging.getLogger("pytorch_lightning").setLevel(logging.INFO)
 
