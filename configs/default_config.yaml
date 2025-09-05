@@ -8,7 +8,7 @@ trainer:
   precision: null
   logger: null
   callbacks: null
-  fast_dev_run: false
+  fast_dev_run: 10
   max_epochs: 100
   min_epochs: null
   max_steps: -1
@@ -44,7 +44,7 @@ trainer:
 model:
   model_mode: SVDDFM
   model_type: DINO_V3
-  feat_extractor_type: None
+  feat_extractor_type: null
   model_configs: 
     ClipSVDDFM:
       dfm: True                                    # whether to train the disentangled fake manifolds
@@ -93,20 +93,21 @@ model:
     learning_rate: 2e-4                            # learning_rate for training
     do_reconstruction: True                        # whether to use latent space encoder-decoder feature reconstruction loss
     use_recon_reg_loss: True                       # whether to use regularization loss function during training to avoid disentangled manifolds crashing
-    dfm_start_epoch: 51                            # starting epoches to train the disentangled fake manifolds
-    dissparcons_start_epoch: 61                    # starting epoches to use distance,  sparcity and consistency losses and also the regularization loss when it's enabled
+    dfm_start_epoch: 6                            # starting epoches to train the disentangled fake manifolds
+    dissparcons_start_epoch: 7                    # starting epoches to use distance,  sparcity and consistency losses and also the regularization loss when it's enabled
   inference_configs: {}
 data:
-  model_type: 'DINO_V3_SAT'                        # ["CLIP", "DINO_V2", "DINO_V3_LVD", "DINO_V3_SAT"] for image transformations, different models have different types
-  train_dataset_path: ''                           # ['data/train']
-  val_dataset_path: ''                             # ['data/val']
-  test_dataset_path: ''                            # ['data/test']
+  model_type: 'DINO_V3_LVD'                        # ["CLIP", "DINO_V2", "DINO_V3_LVD", "DINO_V3_SAT"] for image transformations, different models have different types
+  train_dataset_path: 'data/train/'                           # ['data/train']
+  val_dataset_path: 'data/val/'                             # ['data/val']
+  test_dataset_path: 'data/test/'                           # ['data/test']
   manifolds_paths:                                 # List[str] the paths to the manifolds images paths
-    - 'REAL'
-    - 'SD3'
+    - 'Real'
+    - 'Midjourney'
   manifolds_labels:                                # List[int] labels for the deep fake detection
     - 0
-    - 1
-  batch_size: 120
+    - 2
+  manifolds_indices_path: 'data/manifolds_indices.json' # str The path to the mapping of the corresponding manifolds' indices.
+  batch_size: 100
   num_workers: 2                                   # number of workers for data loading
 
