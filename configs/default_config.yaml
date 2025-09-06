@@ -42,9 +42,9 @@ trainer:
   default_root_dir: './output/'
   model_registry: null
 model:
-  model_mode: SVDDFM
-  model_type: DINO_V3
-  feat_extractor_type: null
+  model_mode: SVDDFM                              # ['SVDDFM', 'SVD', 'FEAT_LINEAR', 'FEAT'], the model type to use
+  model_type: DINO_V3                             # ['CLIP', 'DINO_V2', 'DINO_V3'], the pretrained model type to use
+  feat_extractor_type: null                       # ['CLIP', 'DINO_V2', 'DINO_V3'], the pretrained model type to use when model_mode is 'FEAT' or 'FEAT_LINEAR'
   model_configs: 
     ClipSVDDFM:
       dfm: True                                    # whether to train the disentangled fake manifolds
@@ -85,7 +85,7 @@ model:
       loss_type: 'l2'                              # ['l1', 'smooth_l1', 'l2'], the type of reconstruction loss function
     ReconRegLoss:                                  # Reconstruction Regularization loss
       beta_3_max: 0.1                              # maximum weight value during training, decaying during training
-    DistanceSparcity:                              
+    DistanceSparsity:                              
       beta_1_start: 0.01                           # starting value to scale coefficient for distance and sparcity losses training
       beta_1_end: 0.1                              # max value to scale coefficient for distance and sparcity losses training
     ConsistencyLoss:
@@ -94,8 +94,8 @@ model:
     learning_rate: 2e-4                            # learning_rate for training
     do_reconstruction: True                        # whether to use latent space encoder-decoder feature reconstruction loss
     use_recon_reg_loss: True                       # whether to use regularization loss function during training to avoid disentangled manifolds crashing
-    dfm_start_epoch: 6                            # starting epoches to train the disentangled fake manifolds
-    dissparcons_start_epoch: 7                    # starting epoches to use distance,  sparcity and consistency losses and also the regularization loss when it's enabled
+    dfm_start_epoch: 0                            # starting epoches to train the disentangled fake manifolds
+    dissparcons_start_epoch: 0                    # starting epoches to use distance,  sparcity and consistency losses and also the regularization loss when it's enabled
   inference_configs: {}
 data:
   model_type: 'DINO_V3_LVD'                                  # ["CLIP", "DINO_V2", "DINO_V3_LVD", "DINO_V3_SAT"] for image transformations, different models have different types

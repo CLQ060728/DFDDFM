@@ -7,7 +7,7 @@ import torch.nn.functional as F
 from typing import Literal
 from Model.DFDDFM import SVDResidualLinear, ClipSVDDFM, Dinov2SVDDFM, Dinov3SVDDFM
 from Loss.BaseLoss import BaseLoss
-import logging
+import logging, json
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ class DFDLoss(BaseLoss):
         Compute the DFD loss for a given DFDDFM model.
 
         Args:
-            predictions (Tensor): The predicted logits from the model.
+            logits (Tensor): The predicted logits from the model.
             targets (Tensor): The ground truth labels.
 
         Returns:
@@ -80,11 +80,13 @@ class SVDLoss(BaseLoss):
         Returns:
             dict: Dictionary containing the orthogonal and keepsv losses values.
         """
-        reg_term = torch.tensor(0.0)
+        reg_term = 0.0
         num_reg = 0
 
         if isinstance(dfddfm_model, ClipSVDDFM):
-            for name, module in dfddfm_model.named_children():
+            logger.debug("Computing SVD losses for ClipSVDDFM model...")
+
+            for name, module in dfddfm_model.feat_model.named_children():
                 if name == "encoder":
                     for _, module1 in module.named_children():
                         for _, clip_encoder_layer in enumerate(module1):
@@ -93,6 +95,8 @@ class SVDLoss(BaseLoss):
                                     # compute orthogonal and keepsv losses
                                     for _, sub_module in module2.named_children():
                                         if isinstance(sub_module, SVDResidualLinear):
+                                            logger.debug(f"Found SVDResidualLinear layer: {sub_module}")
+
                                             reg_term += self.__compute_orthogonal_loss__(sub_module)
 
                                             logger.debug(f"orthogonal reg_term: {reg_term}")
@@ -103,7 +107,9 @@ class SVDLoss(BaseLoss):
 
                                             num_reg += 1
         elif isinstance(dfddfm_model, Dinov2SVDDFM):
-            for name, module in dfddfm_model.named_children():
+            logger.debug("Computing SVD losses for Dinov2SVDDFM model...")
+
+            for name, module in dfddfm_model.feat_model.named_children():
                 if name == "encoder":
                     for _, module1 in module.named_children():
                         for _, Dinov2Layer in enumerate(module1):
@@ -114,6 +120,8 @@ class SVDLoss(BaseLoss):
                                             # compute orthogonal and keepsv losses
                                             for _, sub_module in module3.named_children():
                                                 if isinstance(sub_module, SVDResidualLinear):
+                                                    logger.debug(f"Found SVDResidualLinear layer: {sub_module}")
+
                                                     reg_term += self.__compute_orthogonal_loss__(sub_module)
 
                                                     logger.debug(f"orthogonal reg_term: {reg_term}")
@@ -124,7 +132,9 @@ class SVDLoss(BaseLoss):
 
                                                     num_reg += 1
         elif isinstance(dfddfm_model, Dinov3SVDDFM):
-            for name, module in dfddfm_model.named_children():
+            logger.debug("Computing SVD losses for Dinov3SVDDFM model...")
+
+            for name, module in dfddfm_model.feat_model.named_children():
                 if name == "layer":
                     for _, DINOv3ViTLayer in enumerate(module):
                         for name1, module1 in DINOv3ViTLayer.named_children():
@@ -132,6 +142,8 @@ class SVDLoss(BaseLoss):
                                 # compute orthogonal and keepsv losses
                                 for _, sub_module in module1.named_children():
                                     if isinstance(sub_module, SVDResidualLinear):
+                                        logger.debug(f"Found SVDResidualLinear layer: {sub_module}")
+
                                         reg_term += self.__compute_orthogonal_loss__(sub_module)
 
                                         logger.debug(f"orthogonal reg_term: {reg_term}")
@@ -143,14 +155,17 @@ class SVDLoss(BaseLoss):
                                         num_reg += 1
         
         loss = reg_term / num_reg
-        loss = torch.nan_to_num(loss, nan=0.0, posinf=0.0, neginf=0.0)
+        # loss = torch.nan_to_num(loss, nan=0.0, posinf=0.0, neginf=0.0)
 
         logger.debug(f"number of svd loss layers: {num_reg}; final loss: {loss}")
 
         return self.return_loss(self.name, loss)
 
     def __compute_orthogonal_loss__(self, svd_residual_layer: SVDResidualLinear):
+        logger.debug(f"inside __compute_orthogonal_loss__")
+
         if svd_residual_layer.S_residual is not None:
+            logger.debug(f"S_residual is not None, computing orthogonal loss...")
             # According to the properties of orthogonal matrices: A^TA = I
             UUT = torch.cat((svd_residual_layer.U_r, svd_residual_layer.U_residual), dim=1) @ torch.cat((svd_residual_layer.U_r, svd_residual_layer.U_residual), dim=1).t()
             VVT = torch.cat((svd_residual_layer.V_r, svd_residual_layer.V_residual), dim=0) @ torch.cat((svd_residual_layer.V_r, svd_residual_layer.V_residual), dim=0).t()
@@ -171,7 +186,11 @@ class SVDLoss(BaseLoss):
         return loss
 
     def __compute_keepsv_loss__(self, svd_residual_layer: SVDResidualLinear):
+        logger.debug(f"inside __compute_keepsv_loss__")
+
         if (svd_residual_layer.S_residual is not None) and (svd_residual_layer.weight_original_fnorm is not None):
+            logger.debug(f"S_residual and weight_original_fnorm are not None, computing keepsv loss...")
+
             # Total current weight is the fixed main weight plus the residual
             weight_current = svd_residual_layer.weight_r + svd_residual_layer.U_residual @ torch.diag(svd_residual_layer.S_residual) @ svd_residual_layer.V_residual
             # Frobenius norm of current weight
@@ -286,9 +305,12 @@ class DistanceLoss(BaseLoss):
         logger.debug(f"sim_matrix shape: {sim_matrix.size()}; min value: {sim_matrix.min()}; max value: {sim_matrix.max()};")
 
         sim_mask = torch.zeros_like(sim_matrix)
-        sim_mask[:, manifolds_indices2] = 1.0
+        for manifolds_idx in torch.arange(manifolds_indices2.size(0)):
+            sim_mask[manifolds_idx, manifolds_indices2[manifolds_idx]] = 1.0
+        
         loss = sim_matrix * sim_mask
 
+        logger.debug(f"sim_mask shape: {sim_mask.size()};")
         logger.debug(f"loss shape: {loss.size()}; min value: {loss.min()}; max value: {loss.max()};")
 
         return self.return_loss(self.name, loss)
@@ -329,21 +351,31 @@ class SparsityLoss(BaseLoss):
         Returns:
             dict: Dictionary containing the sparsity loss value.
         """
-        spar_manifolds_features1 = torch.zeros_like(manifolds_features1[0, :, 1])
-        spar_manifolds_features2 = torch.zeros_like(manifolds_features2[0, :, 1])
+        spar_manifolds_features1 = torch.zeros(1, manifolds_features1.size(1),
+                                               manifolds_features1.size(2)).to(manifolds_features1.device)
+        spar_manifolds_features2 = torch.zeros(1, manifolds_features2.size(1),
+                                               manifolds_features2.size(2)).to(manifolds_features2.device)
 
         logger.debug(f"spar_manifolds_features1 shape: {spar_manifolds_features1.size()}")
         logger.debug(f"spar_manifolds_features2 shape: {spar_manifolds_features2.size()}")
 
         for manifold_idx in range(manifolds_features1.size(0)):
-            remaining_indices = torch.tensor([idx for idx in range(manifolds_features1.size(0)) if idx != manifold_idx]).to(manifolds_features1)
-            
-            logger.debug(f"manifold_idx: {manifold_idx}; remaining_indices: {remaining_indices}")
-            
+            remaining_indices = torch.tensor([idx for idx in range(manifolds_features1.size(0)) if idx != manifold_idx]).to(manifolds_features1.device)
+
+            logger.debug(f"manifolds_features1 shape: {manifolds_features1.size()}; manifold_idx: {manifold_idx}; remaining_indices: {remaining_indices}")
+
             sum_manifolds_features1 = manifolds_features1[remaining_indices, :, :].sum(dim=0, keepdim=True)
             sum_manifolds_features2 = manifolds_features2[remaining_indices, :, :].sum(dim=0, keepdim=True)
-            spar_manifolds_features1 += torch.abs(manifolds_features1[manifold_idx, :, :] * sum_manifolds_features1).sum(-1)
-            spar_manifolds_features2 += torch.abs(manifolds_features2[manifold_idx, :, :] * sum_manifolds_features2).sum(-1)
+
+            logger.debug(f"sum_manifolds_features1 shape: {sum_manifolds_features1.size()}; sum_manifolds_features2 shape: {sum_manifolds_features2.size()}")
+
+            abs_manifolds_features1 = torch.abs(manifolds_features1[[manifold_idx], :, :] * sum_manifolds_features1)
+            abs_manifolds_features2 = torch.abs(manifolds_features2[[manifold_idx], :, :] * sum_manifolds_features2)
+
+            logger.debug(f"abs_manifolds_features1 shape: {abs_manifolds_features1.size()}; abs_manifolds_features2 shape: {abs_manifolds_features2.size()}")
+
+            spar_manifolds_features1 += abs_manifolds_features1
+            spar_manifolds_features2 += abs_manifolds_features2
 
         loss = spar_manifolds_features1 + spar_manifolds_features2
 
@@ -433,6 +465,7 @@ class ReconRegLoss(BaseLoss):
         dis_matrix = 1 - F.cosine_similarity(dis_manifolds_features1, dis_manifolds_features2, dim=-1).T
         dis_matrix = F.softmax(dis_matrix, dim=-1)
 
+        logger.debug(f"Inside {self.name} function.")
         logger.debug(f"dis_matrix shape: {dis_matrix.size()}; min value: {dis_matrix.min()}; max value: {dis_matrix.max()};")
 
         loss = (dis_matrix.mean(dim=0, keepdim=True) - 1 / dis_matrix.size(1))

@@ -33,7 +33,7 @@ class ClipFeatureExtractor(nn.Module):
             self.head = nn.Sequential(
                 nn.Linear(1024, 512),
                 nn.GELU(),
-                nn.Linear(512, 2)
+                nn.Linear(512, 1)
             )
             self.head.requires_grad_(True)
 
@@ -87,7 +87,7 @@ class Dinov2FeatureExtractor(nn.Module):
             self.head = nn.Sequential(
                 nn.Linear(1024, 512),
                 nn.GELU(),
-                nn.Linear(512, 2)
+                nn.Linear(512, 1)
             )
             self.head.requires_grad_(True)
 
@@ -160,7 +160,7 @@ class Dinov3FeatureExtractor(nn.Module):
             self.head = nn.Sequential(
                 nn.Linear(1024, 512),
                 nn.GELU(),
-                nn.Linear(512, 2)
+                nn.Linear(512, 1)
             )
             self.head.requires_grad_(True)
 

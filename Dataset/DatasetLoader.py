@@ -16,20 +16,17 @@ logger = logging.getLogger(__name__)
 
 class DFDDFMDataset(Dataset):
     def __init__(self,
-                 ds_type: Literal["train", "val", "test"],
                  model_type: Literal["CLIP", "DINO_V2", "DINO_V3_LVD", "DINO_V3_SAT"],
                  img_root_path: str,
                  manifolds_paths: Tuple[str, str],
                  manifolds_indices_correspondence: Dict[str, str] = None):
         """
             params:
-                ds_type: Literal["train", "val", "test"] The type of the dataset.
                 model_type: Literal["CLIP", "DINO_V2", "DINO_V3_LVD", "DINO_V3_SAT"] The type of the model to be used. Options are "CLIP", "DINO_V2", "DINO_V3_LVD", "DINO_V3_SAT".
                 img_root_path: str The root path to the images.
                 manifolds_paths: Tuple[str, str] The paths to the manifolds.
                 manifolds_indices_correspondence: Dict[str, str] The correspondence between the indices of the manifolds.
         """
-        assert ds_type in ["train", "val", "test"], f"ds_type should be one of ['train', 'val', 'test'], but got {ds_type}."
         assert os.path.exists(img_root_path), f"Image root path {img_root_path} does not exist."
         for path in manifolds_paths:
             manifold_path = os.path.join(img_root_path, path)
@@ -43,7 +40,6 @@ class DFDDFMDataset(Dataset):
         assert isinstance(manifolds_indices_correspondence, dict), \
             f"manifolds_indices_correspondence should be a dict, but got {type(manifolds_indices_correspondence)}."
 
-        self.ds_type = ds_type
         mani_0_imgs_paths = np.array(os.listdir(os.path.join(img_root_path, manifolds_paths[0])))
         mani_1_imgs_paths = np.array(os.listdir(os.path.join(img_root_path, manifolds_paths[1])))
         
@@ -97,16 +93,12 @@ class DFDDFMDataset(Dataset):
 
             mani_0_1_pair.extend(list(zip(mani_0_imgs[:len(mani_0_imgs)//2], mani_1_imgs[:len(mani_1_imgs)//2])))
             mani_1_0_pair.extend(list(zip(mani_1_imgs[len(mani_1_imgs)//2:], mani_0_imgs[len(mani_0_imgs)//2:])))
-            if self.ds_type == "train":
-                labels_0_1.extend(np.array([[1, 0], [0, 1]], dtype=np.float32).reshape(1,
-                                2, 2).repeat(len(mani_0_imgs)//2, axis=0).tolist())
-                labels_1_0.extend(np.array([[0, 1], [1, 0]], dtype=np.float32).reshape(1,
-                                2, 2).repeat(len(mani_1_imgs)//2, axis=0).tolist())
-            else:
-                labels_0_1.extend(np.array([0, 1], dtype=np.int64).reshape(1,
-                                2).repeat(len(mani_0_imgs)//2, axis=0).tolist())
-                labels_1_0.extend(np.array([1, 0], dtype=np.int64).reshape(1,
-                                2).repeat(len(mani_1_imgs)//2, axis=0).tolist())
+            
+            labels_0_1.extend(np.array([[0], [1]], dtype=np.float32).reshape(1,
+                            2, 1).repeat(len(mani_0_imgs)//2, axis=0).tolist())
+            labels_1_0.extend(np.array([[1], [0]], dtype=np.float32).reshape(1,
+                            2, 1).repeat(len(mani_1_imgs)//2, axis=0).tolist())
+            
             mani2_0_1.extend(np.array([1]).repeat(len(mani_0_imgs)//2, axis=0).tolist())
             mani2_1_0.extend(np.array([0]).repeat(len(mani_1_imgs)//2, axis=0).tolist())
 
@@ -149,10 +141,7 @@ class DFDDFMDataset(Dataset):
         logger.debug(f"Manifold 2 indices sample after shuffling (second 10 indices): {self.manifold2_indices[pair_indices_length:pair_indices_length+10]}")
         logger.debug(f"Total number of manifold 2 indices after shuffling: {self.manifold2_indices.shape}")
 
-        if self.ds_type == "train":
-            self.labels = np.concatenate([labels_0_1, labels_1_0], axis=0, dtype=np.float32)
-        else:
-            self.labels = np.concatenate([labels_0_1, labels_1_0], axis=0, dtype=np.int64)
+        self.labels = np.concatenate([labels_0_1, labels_1_0], axis=0, dtype=np.float32)
 
         logger.debug(f"Labels sample (first 10 labels): {self.labels[:10]}")
         logger.debug(f"Labels sample (second 10 labels): {self.labels[pair_indices_length:pair_indices_length+10]}")
@@ -193,12 +182,9 @@ class DFDDFMDataset(Dataset):
             transform = self.transform_img_sat()
         img_tensor_1 = transform(img_1)
         img_tensor_2 = transform(img_2)
-        if self.ds_type == "train":
-            label_tensor_1 = torch.tensor(label_1, requires_grad=False).float()
-            label_tensor_2 = torch.tensor(label_2, requires_grad=False).float()
-        else:
-            label_tensor_1 = torch.tensor(label_1, requires_grad=False).long()
-            label_tensor_2 = torch.tensor(label_2, requires_grad=False).long()
+        
+        label_tensor_1 = torch.tensor(label_1, requires_grad=False).float()
+        label_tensor_2 = torch.tensor(label_2, requires_grad=False).float()
 
         return (img_tensor_1, img_tensor_2), torch.tensor(self.manifold2_indices[idx]).long(),\
                (label_tensor_1, label_tensor_2)
@@ -284,12 +270,6 @@ class DFDDFMTrainDataModule(LTN.LightningDataModule):
         self.train_dataset_path = train_dataset_path
         self.val_dataset_path = val_dataset_path
         self.test_dataset_path = test_dataset_path
-        if train_dataset_path is not None:
-            self.ds_type_train = "train"
-        if val_dataset_path is not None:
-            self.ds_type_val = "val"
-        if test_dataset_path is not None:
-            self.ds_type_test = "test"
         self.model_type = model_type
         self.manifolds_paths = manifolds_paths
         with open(manifolds_indices_path, "r") as mani_idxes_file:
@@ -301,12 +281,12 @@ class DFDDFMTrainDataModule(LTN.LightningDataModule):
         if stage == "fit":
             assert self.train_dataset_path is not None, "train_dataset_path must be provided for fit"
 
-            self.train_dataset = DFDDFMDataset(self.ds_type_train, self.model_type,
+            self.train_dataset = DFDDFMDataset(self.model_type,
                                                self.train_dataset_path,
                                                self.manifolds_paths,
                                                self.manifolds_indices_correspondence)
             if self.val_dataset_path is not None:
-                self.val_dataset = DFDDFMDataset(self.ds_type_val, self.model_type, 
+                self.val_dataset = DFDDFMDataset(self.model_type,
                                                  self.val_dataset_path,
                                                  self.manifolds_paths,
                                                  self.manifolds_indices_correspondence)
@@ -315,7 +295,7 @@ class DFDDFMTrainDataModule(LTN.LightningDataModule):
         if stage == "test":
             assert self.test_dataset_path is not None, "test_dataset_path must be provided for test"
 
-            self.test_dataset = DFDDFMDataset(self.ds_type_test, self.model_type,
+            self.test_dataset = DFDDFMDataset(self.model_type,
                                               self.test_dataset_path,
                                               self.manifolds_paths,
                                               self.manifolds_indices_correspondence)
