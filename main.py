@@ -498,7 +498,7 @@ def cli_main():
 if __name__ == "__main__":
     os.makedirs("./logs", exist_ok=True)
     os.makedirs("./output", exist_ok=True)
-    logging.basicConfig(filename='./logs/main.log', level=logging.DEBUG)
+    logging.basicConfig(filename='./logs/main.log', level=logging.INFO)
     # configure logging at the root level of lightning
     # logging.getLogger("pytorch_lightning").setLevel(logging.INFO)
 
