@@ -1,7 +1,6 @@
 # Author: Qian Liu
 # Email: liu.qian.pro@gmail.com
 
-import itertools
 from typing import Literal, List, Dict, Any
 from PIL.Image import Image
 import torch
