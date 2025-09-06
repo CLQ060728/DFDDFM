@@ -13,16 +13,16 @@ trainer:
         monitor: "accuracy"           # validation metric, e.g. "accuracy", logged by self.log("accuracy", accuracy, prog_bar=True)
         mode: "max"                   # "min" for loss, "max" for accuracy
         save_top_k: 1                 # save only the best model
-        filename: "best-{epoch:02d}-{accuracy:.4f}"
+        filename: "best-accuracy-{accuracy:.4f}"    # -{epoch:02d}
     - class_path: lightning.pytorch.callbacks.ModelCheckpoint
       init_args:
         monitor: "roc_auc"           # validation metric, e.g. "roc_auc", logged by self.log("roc_auc", roc_auc, prog_bar=True)
         mode: "max"                   # "min" for loss, "max" for accuracy
         save_top_k: 1                 # save only the best model
-        filename: "best-{epoch:02d}-{roc_auc:.4f}"
+        filename: "best-roc_auc-{roc_auc:.4f}"     # -{epoch:02d}
     - class_path: lightning.pytorch.callbacks.ModelCheckpoint
       init_args:
-        every_n_epochs: 20            # save every 20 epochs
+        every_n_epochs: 50            # save every 50 epochs
         save_top_k: -1                # save all checkpoints at this frequency
         filename: "epoch{epoch:02d}"
   fast_dev_run: False
