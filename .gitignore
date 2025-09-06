@@ -7,3 +7,4 @@ logs/
 output/
 pre_trained/
 configs/
+configs/default_config.yaml
