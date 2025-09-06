@@ -25,7 +25,7 @@ trainer:
         every_n_epochs: 50            # save every 50 epochs
         save_top_k: -1                # save all checkpoints at this frequency
         filename: "epoch{epoch:02d}"
-  fast_dev_run: False
+  fast_dev_run: false
   max_epochs: 100
   min_epochs: null
   max_steps: -1
@@ -38,11 +38,10 @@ trainer:
   overfit_batches: 0.0
   val_check_interval: null
   check_val_every_n_epoch: 1
-  num_sanity_val_steps: False
+  num_sanity_val_steps: 0
   log_every_n_steps: 20
-  refresh_rate: 20
-  enable_checkpointing: True
-  enable_progress_bar: True
+  enable_checkpointing: true
+  enable_progress_bar: true
   enable_model_summary: null
   accumulate_grad_batches: 1
   gradient_clip_val: null
@@ -84,14 +83,14 @@ model:
       model_type: 'LVD'                            # ['LVD', 'SAT'], the pretrain datasets for DINOV3 models, "LVD-1689M" or "SAT-493M"
       chkpt_dir: './pre_trained/META_DINOV3/'      # the chkpt path for the pretrained DINOV3 model
     ClipFeatureExtractor:
-      as_linear_classifier: False                  # whether to use a linear classifier on top of frozen CLIP features
+      as_linear_classifier: false                  # whether to use a linear classifier on top of frozen CLIP features
       chkpt_dir: './pre_trained/OPENAI_CLIP/'      # the root chkpt path for the pretrained CLIP model
     Dinov2FeatureExtractor:
-      as_linear_classifier: False                  # whether to use a linear classifier on top of frozen DINOV2 features
+      as_linear_classifier: false                  # whether to use a linear classifier on top of frozen DINOV2 features
       chkpt_dir: './pre_trained/META_DINOV2/'      # the root chkpt path for the pretrained DINOV2 model
     Dinov3FeatureExtractor:
       pre_ds: 'LVD'                                # ['LVD', 'SAT'], the pretrain datasets for DINOV3 models, "LVD-1689M" or "SAT-493M"
-      as_linear_classifier: False                  # whether to use a linear classifier on top of frozen DINOV3 features
+      as_linear_classifier: false                  # whether to use a linear classifier on top of frozen DINOV3 features
       chkpt_dir: './pre_trained/META_DINOV3/'      # the root chkpt path for the pretrained DINOV3 model
   loss_configs:
     DFDLoss:                                       # Deep Fake Detection loss
@@ -110,8 +109,8 @@ model:
       beta_2_max: 0.1                              # max value to scale coefficient for consistency loss during training
   optim_configs:                                   # configurations for optimization
     learning_rate: 2e-4                            # learning_rate for training
-    do_reconstruction: True                        # whether to use latent space encoder-decoder feature reconstruction loss
-    use_recon_reg_loss: True                       # whether to use regularization loss function during training to avoid disentangled manifolds crashing
+    do_reconstruction: true                        # whether to use latent space encoder-decoder feature reconstruction loss
+    use_recon_reg_loss: true                       # whether to use regularization loss function during training to avoid disentangled manifolds crashing
     dfm_start_epoch: 61                            # starting epoches to train the disentangled fake manifolds
     dissparcons_start_epoch: 71                    # starting epoches to use distance,  sparcity and consistency losses and also the regularization loss when it's enabled
   inference_configs: {}
