@@ -27,8 +27,8 @@ trainer:
         filename: "epoch{epoch:02d}"
     - class_path: lightning.pytorch.callbacks.StochasticWeightAveraging
       init_args:
-        swa_lrs: 1e-4                 # or 5e-5, 1/5 or 1/10 of optim learning_rate. learning rate for SWA
-        swa_epoch_start: 75           # starting epoch for SWA
+        swa_lrs: 6e-5                 # or 3e-5, 1/5 or 1/10 of optim learning_rate. learning rate for SWA
+        swa_epoch_start: 76           # starting epoch for SWA
         annealing_epochs: 10          # number of epochs for annealing
         annealing_strategy: 'cos'     # 'cos' or 'linear'
     # - class_path: lightning.pytorch.callbacks.ModelSummary
@@ -72,32 +72,32 @@ model:
   model_type: DINO_V3                             # ['CLIP', 'DINO_V2', 'DINO_V3'], the pretrained model type to use
   feat_extractor_type: null                       # ['CLIP', 'DINO_V2', 'DINO_V3'], the pretrained model type to use when model_mode is 'FEAT' or 'FEAT_LINEAR'
   model_configs: 
-    ClipSVDDFM:
+    ClipSVDDFM:                                    # CLIP model for both SVD and SVDDFM
       dfm: True                                    # whether to train the disentangled fake manifolds
       dfm_num_layers: 2                            # the number of layers for the manifold network
       dfm_aggr: 'SUM'                              # ['SUM', 'CONCAT'], the aggregation method for the manifold features
       out_feat_type: 'HIDDEN'                      # ['HIDDEN', 'CLS'], the latent feature to use for pretrained ViT models          
       chkpt_dir: './pre_trained/OPENAI_CLIP/'      # the root chkpt path for the pretrained CLIP model
-    Dinov2SVDDFM:
+    Dinov2SVDDFM:                                  # DINO_V2 model for both SVD and SVDDFM
       dfm: True                                    # whether to train the disentangled fake manifolds
       dfm_num_layers: 2                            # the number of layers for the manifold network
       dfm_aggr: 'SUM'                              # ['SUM', 'CONCAT'], the aggregation method for the manifold features
       out_feat_type: 'HIDDEN'                      # ['HIDDEN', 'CLS'], the latent feature to use for pretrained ViT models
       chkpt_dir: './pre_trained/META_DINOV2/'      # the root chkpt path for the pretrained DINOV2 model
-    Dinov3SVDDFM:
+    Dinov3SVDDFM:                                  # DINO_V3 model for both SVD and SVDDFM
       dfm: True                                    # whether to train the disentangled fake manifolds
       dfm_num_layers: 2                            # the number of layers for the manifold network
       dfm_aggr: 'SUM'                              # ['SUM', 'CONCAT'], the aggregation method for the manifold features
       out_feat_type: 'HIDDEN'                      # ['HIDDEN', 'CLS'], the latent feature to use for pretrained ViT models
       model_type: 'LVD'                            # ['LVD', 'SAT'], the pretrain datasets for DINOV3 models, "LVD-1689M" or "SAT-493M"
       chkpt_dir: './pre_trained/META_DINOV3/'      # the chkpt path for the pretrained DINOV3 model
-    ClipFeatureExtractor:
+    ClipFeatureExtractor:                          # CLIP model for both FEAT and FEAT_LINEAR
       as_linear_classifier: false                  # whether to use a linear classifier on top of frozen CLIP features
       chkpt_dir: './pre_trained/OPENAI_CLIP/'      # the root chkpt path for the pretrained CLIP model
-    Dinov2FeatureExtractor:
+    Dinov2FeatureExtractor:                        # DINO_V2 model for both FEAT and FEAT_LINEAR
       as_linear_classifier: false                  # whether to use a linear classifier on top of frozen DINOV2 features
       chkpt_dir: './pre_trained/META_DINOV2/'      # the root chkpt path for the pretrained DINOV2 model
-    Dinov3FeatureExtractor:
+    Dinov3FeatureExtractor:                        # DINO_V3 model for both FEAT and FEAT_LINEAR
       pre_ds: 'LVD'                                # ['LVD', 'SAT'], the pretrain datasets for DINOV3 models, "LVD-1689M" or "SAT-493M"
       as_linear_classifier: false                  # whether to use a linear classifier on top of frozen DINOV3 features
       chkpt_dir: './pre_trained/META_DINOV3/'      # the root chkpt path for the pretrained DINOV3 model
@@ -117,7 +117,7 @@ model:
     ConsistencyLoss:
       beta_2_max: 0.1                              # max value to scale coefficient for consistency loss during training
   optim_configs:                                   # configurations for optimization
-    learning_rate: 5e-4                            # learning_rate for training
+    learning_rate: 3e-4                            # learning_rate for training
     # scheduler_T_max: 100                           # T_max for CosineAnnealingLR scheduler
     do_reconstruction: true                        # whether to use latent space encoder-decoder feature reconstruction loss
     use_recon_reg_loss: true                       # whether to use regularization loss function during training to avoid disentangled manifolds crashing
@@ -133,6 +133,6 @@ data:
     - 'Real'
     - 'Midjourney'
   manifolds_indices_path: 'data/manifolds_indices_1.json' # str The path to the mapping of the corresponding manifolds' indices.
-  batch_size: 100
+  batch_size: 50                                   # batch size for training
   num_workers: 2                                   # number of workers for data loading
 
