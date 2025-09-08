@@ -5,7 +5,7 @@ from typing import Literal, List, Dict, Any
 from PIL.Image import Image
 import torch
 import torch.nn.functional as F
-from torch.optim.lr_scheduler import CosineAnnealingLR
+# from torch.optim.lr_scheduler import CosineAnnealingLR
 import lightning as LTN
 from torchmetrics.functional.classification import binary_accuracy, binary_auroc
 from lightning.pytorch.cli import LightningCLI
@@ -489,15 +489,16 @@ class DFDDFMTrainer(LTN.LightningModule):
                                                 self.model.parameters()),
                                          lr=self.learning_rate)
 
-        scheduler = CosineAnnealingLR(optimizer, T_max=self.optim_configs.scheduler_T_max)
+        return optimizer
+        # scheduler = CosineAnnealingLR(optimizer, T_max=self.optim_configs.scheduler_T_max)
 
-        return {
-            "optimizer": optimizer,
-            "lr_scheduler": {
-                "scheduler": scheduler,
-                "interval": "epoch"  # or "step"
-            }
-        }
+        # return {
+        #     "optimizer": optimizer,
+        #     "lr_scheduler": {
+        #         "scheduler": scheduler,
+        #         "interval": "epoch"  # or "step"
+        #     }
+        # }
 
 
 def cli_main():
