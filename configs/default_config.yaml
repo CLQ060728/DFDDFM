@@ -111,11 +111,12 @@ model:
     ConsistencyLoss:
       beta_2_max: 0.1                              # max value to scale coefficient for consistency loss during training
   optim_configs:                                   # configurations for optimization
-    learning_rate: 2e-4                            # learning_rate for training
+    learning_rate: 5e-4                            # learning_rate for training
+    scheduler_T_max: 100                           # T_max for CosineAnnealingLR scheduler
     do_reconstruction: true                        # whether to use latent space encoder-decoder feature reconstruction loss
     use_recon_reg_loss: true                       # whether to use regularization loss function during training to avoid disentangled manifolds crashing
     dfm_start_epoch: 61                            # starting epoches to train the disentangled fake manifolds
-    dissparcons_start_epoch: 71                    # starting epoches to use distance,  sparcity and consistency losses and also the regularization loss when it's enabled
+    dissparcons_start_epoch: 66                    # starting epoches to use distance,  sparcity and consistency losses and also the regularization loss when it's enabled
   inference_configs: {}
 data:
   model_type: 'DINO_V3_LVD'                                  # ["CLIP", "DINO_V2", "DINO_V3_LVD", "DINO_V3_SAT"] for image transformations, different models have different types
