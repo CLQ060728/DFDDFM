@@ -25,6 +25,9 @@ trainer:
         every_n_epochs: 50            # save every 50 epochs
         save_top_k: -1                # save all checkpoints at this frequency
         filename: "epoch{epoch:02d}"
+    - class_path: lightning.pytorch.callbacks.TQDMProgressBar
+      init_args:
+        refresh_rate: 10              # how often to update the progress bar (in steps)
     - class_path: lightning.pytorch.callbacks.StochasticWeightAveraging
       init_args:
         swa_lrs: 6e-5                 # or 3e-5, 1/5 or 1/10 of optim learning_rate. learning rate for SWA
