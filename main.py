@@ -137,7 +137,7 @@ class DFDDFMTrainer(LTN.LightningModule):
                                         self.model_configs.Dinov3SVDDFM.chkpt_dir)
             self.__check_model_grad__(self.model.feat_model)
 
-            self.model.feat_model = pre_trained_svd_feat_model
+            self.model.feat_model = pre_trained_svd_feat_model.to(self.model.device)
 
             self.__check_model_grad__(self.model.feat_model)
             self.__check_model_grad__(self.model)
