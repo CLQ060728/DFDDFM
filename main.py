@@ -64,6 +64,18 @@ class DFDDFMTrainer(LTN.LightningModule):
         self.inference_configs = ConfigDict(inference_configs)
         self.beta_1 = self.loss_configs.DistanceSparsity.beta_1_start
         self.__get_all_training_objects__()  # Initialize model and losses
+    
+    def __check_model_grad__(self, model):
+        total_frozen_params = 0
+        total_trainable_params = 0
+        for _, param in model.named_parameters():
+            if param.requires_grad:
+                total_trainable_params += 1
+            else:
+                total_frozen_params += 1
+        
+        logger.info(f"Total trainable params: {total_trainable_params}")
+        logger.info(f"Total frozen params: {total_frozen_params}")
 
     def __get_all_training_objects__(self):
         if self.model_mode == "SVD":
@@ -100,8 +112,35 @@ class DFDDFMTrainer(LTN.LightningModule):
             assert os.path.exists(self.svd_dfm.svd_chkpt_path), f"SVD checkpoint path does not exist: {self.svd_dfm.svd_chkpt_path}"
             logger.debug(f"Loading pretrained SVD model from {self.svd_dfm.svd_chkpt_path} for SVD_DFM training...")
 
-            self.model = self.load_from_checkpoint(self.svd_dfm.svd_chkpt_path).model
-            self.model.requires_grad_(False)  # Freeze all parameters initially
+            pre_trained_svd_feat_model = self.load_from_checkpoint(self.svd_dfm.svd_chkpt_path).model.feat_model
+            pre_trained_svd_feat_model.requires_grad_(False)  # Freeze the feature extractor
+            self.__check_model_grad__(pre_trained_svd_feat_model)
+
+            if self.model_type == "CLIP":
+                self.model = ClipSVDDFM(self.device, self.model_configs.ClipSVDDFM.dfm,
+                                        self.model_configs.ClipSVDDFM.dfm_num_layers,
+                                        self.model_configs.ClipSVDDFM.dfm_aggr,
+                                        self.model_configs.ClipSVDDFM.out_feat_type,
+                                        self.model_configs.ClipSVDDFM.chkpt_dir)
+            elif self.model_type == "DINO_V2":
+                self.model = Dinov2SVDDFM(self.device, self.model_configs.Dinov2SVDDFM.dfm,
+                                        self.model_configs.Dinov2SVDDFM.dfm_num_layers,
+                                        self.model_configs.Dinov2SVDDFM.dfm_aggr,
+                                        self.model_configs.Dinov2SVDDFM.out_feat_type,
+                                        self.model_configs.Dinov2SVDDFM.chkpt_dir)
+            elif self.model_type == "DINO_V3":
+                self.model = Dinov3SVDDFM(self.device, self.model_configs.Dinov3SVDDFM.dfm,
+                                        self.model_configs.Dinov3SVDDFM.dfm_num_layers,
+                                        self.model_configs.Dinov3SVDDFM.dfm_aggr,
+                                        self.model_configs.Dinov3SVDDFM.out_feat_type,
+                                        self.model_configs.Dinov3SVDDFM.model_type,
+                                        self.model_configs.Dinov3SVDDFM.chkpt_dir)
+            self.__check_model_grad__(self.model.feat_model)
+
+            self.model.feat_model = pre_trained_svd_feat_model
+
+            self.__check_model_grad__(self.model.feat_model)
+            self.__check_model_grad__(self.model)
 
         if self.model_mode == "FEAT" or self.model_mode == "FEAT_LINEAR":
             self.model_configs.ClipFeatureExtractor.as_linear_classifier =\
