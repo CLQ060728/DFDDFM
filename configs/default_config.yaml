@@ -28,12 +28,12 @@ trainer:
     - class_path: lightning.pytorch.callbacks.TQDMProgressBar
       init_args:
         refresh_rate: 10              # how often to update the progress bar (in steps)
-    - class_path: lightning.pytorch.callbacks.StochasticWeightAveraging
-      init_args:
-        swa_lrs: 6e-5                 # or 3e-5, 1/5 or 1/10 of optim learning_rate. learning rate for SWA
-        swa_epoch_start: 76           # starting epoch for SWA
-        annealing_epochs: 10          # number of epochs for annealing
-        annealing_strategy: 'cos'     # 'cos' or 'linear'
+    # - class_path: lightning.pytorch.callbacks.StochasticWeightAveraging
+    #   init_args:
+    #     swa_lrs: 6e-5                 # or 3e-5, 1/5 or 1/10 of optim learning_rate. learning rate for SWA
+    #     swa_epoch_start: 76           # starting epoch for SWA
+    #     annealing_epochs: 10          # number of epochs for annealing
+    #     annealing_strategy: 'cos'     # 'cos' or 'linear'
     # - class_path: lightning.pytorch.callbacks.ModelSummary
     #   init_args:
     #     max_depth: -1      # detailed model summary for sub modules, default is 1
@@ -71,7 +71,10 @@ trainer:
   default_root_dir: './output/'
   model_registry: null
 model:
-  model_mode: SVDDFM                              # ['SVDDFM', 'SVD', 'FEAT_LINEAR', 'FEAT'], the model type to use
+  model_mode: SVDDFM                              # ['SVDDFM', 'SVD_DFM', 'SVD', 'FEAT_LINEAR', 'FEAT'], the model type to use
+  svd_dfm:
+    svd_dfm_with_dfd: true                         # whether to use DFD loss when model_mode is 'SVD_DFM'
+    svd_chkpt_path: null                           # the path to the pretrained SVD model checkpoint, if None, train from scratch
   model_type: DINO_V3                             # ['CLIP', 'DINO_V2', 'DINO_V3'], the pretrained model type to use
   feat_extractor_type: null                       # ['CLIP', 'DINO_V2', 'DINO_V3'], the pretrained model type to use when model_mode is 'FEAT' or 'FEAT_LINEAR'
   model_configs: 

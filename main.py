@@ -22,7 +22,8 @@ logger = logging.getLogger(__name__)
 
 class DFDDFMTrainer(LTN.LightningModule):
     def __init__(self,
-                 model_mode: Literal["SVDDFM", "SVD", "FEAT", "FEAT_LINEAR"] = "SVDDFM",
+                 model_mode: Literal["SVDDFM", "SVD_DFM", "SVD", "FEAT", "FEAT_LINEAR"] = "SVDDFM",
+                 svd_dfm: Dict[str, Any] = {},
                  model_type: Literal["CLIP", "DINO_V2", "DINO_V3"] | None = "DINO_V3",
                  feat_extractor_type: Literal["CLIP", "DINO_V2", "DINO_V3"] | None = None,
                  model_configs: Dict[str, Any] = {},
@@ -32,7 +33,8 @@ class DFDDFMTrainer(LTN.LightningModule):
         """
             Initialize the DFDDFMTrainer with the given configurations.
             Params:
-                model_mode: The mode of the model (SVDDFM, SVD, FEAT, FEAT_LINEAR).
+                model_mode: The mode of the model (SVDDFM, SVD_DFM, SVD, FEAT, FEAT_LINEAR).
+                svd_dfm: Configuration dictionary for the SVD_DFM model.
                 model_type: The type of the DFM model (CLIP, DINO_V2, DINO_V3).
                 feat_extractor_type: The type of the feature extractor (CLIP, DINO_V2, DINO_V3).
                 model_configs: Configuration dictionary for the model.
@@ -41,8 +43,15 @@ class DFDDFMTrainer(LTN.LightningModule):
         """
         super(DFDDFMTrainer, self).__init__()
         self.save_hyperparameters()
-        
+        if model_mode == "SVD_DFM":
+            assert svd_dfm is not None and len(svd_dfm) > 0, "svd_dfm config must be provided for SVD_DFM model_mode"
+            assert svd_dfm.get("svd_chkpt_path", None) is not None and svd_dfm.get("svd_chkpt_path", None) != "", "svd_chkpt_path must be provided for SVD_DFM model_mode"
+        assert model_mode in ["SVDDFM", "SVD_DFM", "SVD", "FEAT", "FEAT_LINEAR"], f"Invalid model_mode: {model_mode}"
+        assert model_type in ["CLIP", "DINO_V2", "DINO_V3"], f"Invalid model_type: {model_type}"
+
         self.model_mode = model_mode
+        self.svd_dfm = ConfigDict(svd_dfm)
+        self.svd_dfm_with_dfd = self.svd_dfm.svd_dfm_with_dfd
         self.learning_rate = optim_configs.get("learning_rate", 2e-4)
         self.do_reconstruction = optim_configs.get("do_reconstruction", False)
         self.use_recon_reg_loss = optim_configs.get("use_recon_reg_loss", False)
@@ -61,7 +70,7 @@ class DFDDFMTrainer(LTN.LightningModule):
             self.model_configs.ClipSVDDFM.dfm = False
             self.model_configs.Dinov2SVDDFM.dfm = False
             self.model_configs.Dinov3SVDDFM.dfm = False
-        elif self.model_mode == "SVDDFM":
+        elif self.model_mode == "SVDDFM" or self.model_mode == "SVD_DFM":
             self.model_configs.ClipSVDDFM.dfm = True
             self.model_configs.Dinov2SVDDFM.dfm = True
             self.model_configs.Dinov3SVDDFM.dfm = True
@@ -87,6 +96,13 @@ class DFDDFMTrainer(LTN.LightningModule):
                                         self.model_configs.Dinov3SVDDFM.model_type,
                                         self.model_configs.Dinov3SVDDFM.chkpt_dir)
         
+        if self.model_mode == "SVD_DFM":
+            assert os.path.exists(self.svd_dfm.svd_chkpt_path), f"SVD checkpoint path does not exist: {self.svd_dfm.svd_chkpt_path}"
+            logger.debug(f"Loading pretrained SVD model from {self.svd_dfm.svd_chkpt_path} for SVD_DFM training...")
+
+            self.model = self.load_from_checkpoint(self.svd_dfm.svd_chkpt_path).model
+            self.model.requires_grad_(False)  # Freeze all parameters initially
+
         if self.model_mode == "FEAT" or self.model_mode == "FEAT_LINEAR":
             self.model_configs.ClipFeatureExtractor.as_linear_classifier =\
                 True if self.model_mode == "FEAT_LINEAR" else False
@@ -111,9 +127,12 @@ class DFDDFMTrainer(LTN.LightningModule):
         
         if self.model_mode != "FEAT":
             self.dfd_loss = DFDLoss(coef=self.loss_configs.DFDLoss.coef)
+            if not self.svd_dfm_with_dfd and (self.model_mode == "SVD_DFM"):
+                self.dfd_loss = None
+                del self.dfd_loss
             if self.model_mode == "SVDDFM" or self.model_mode == "SVD":
                 self.svd_loss = SVDLoss(coef=self.loss_configs.SVDLoss.coef)
-            if self.model_mode == "SVDDFM":
+            if self.model_mode == "SVDDFM" or self.model_mode == "SVD_DFM":
                 self.consistency_loss = ConsistencyLoss()
                 self.distance_loss = DistanceLoss()
                 self.sparsity_loss = SparsityLoss()
@@ -125,7 +144,7 @@ class DFDDFMTrainer(LTN.LightningModule):
                         self.recon_reg_loss = ReconRegLoss(coef=self.loss_configs.ReconRegLoss.beta_3_max)
 
     def forward(self, batch):
-        if self.model_mode == "SVDDFM":
+        if self.model_mode == "SVDDFM" or self.model_mode == "SVD_DFM":
             x_pair, x2_manifold_indices, y_pair = batch
             x_1, x_2 = x_pair
             y_hat_1, encoder_features_1, decoder_features_1, manifolds_features_1 = self.model(x_1)
@@ -321,6 +340,105 @@ class DFDDFMTrainer(LTN.LightningModule):
                         total_loss.update({"recon_reg_loss": recon_reg_loss_value})
 
                 self.log_dict(total_loss, prog_bar=True)
+        elif self.model_mode == "SVD_DFM":
+            logger.debug(f"Epoch {self.current_epoch}: Training with SVD_DFM model")
+
+            y_hat_1, encoder_features_1, decoder_features_1, manifolds_features_1,\
+            y_hat_2, encoder_features_2, decoder_features_2, manifolds_features_2,\
+            x2_manifold_indices, y_pair = self(batch)
+            y_1, y_2 = y_pair
+            
+            # compute dfd losses if applicable
+            if self.svd_dfm_with_dfd:
+                dfd_loss_dict_1 = self.dfd_loss(y_hat_1, y_1)
+                dfd_loss_dict_2 = self.dfd_loss(y_hat_2, y_2)
+                dfd_loss_value_1 = dfd_loss_dict_1["dfd_loss"]
+                dfd_loss_value_2 = dfd_loss_dict_2["dfd_loss"]
+                total_loss.update({"dfd_loss": (dfd_loss_value_1 + dfd_loss_value_2) / 2})
+            
+            # compute dfm reconstruction and regularization losses
+            if self.do_reconstruction:
+                recon_loss_dict_1 = self.recon_loss(decoder_features_1, encoder_features_1)
+                recon_loss_dict_2 = self.recon_loss(decoder_features_2, encoder_features_2)
+                recon_loss_value_1 = recon_loss_dict_1[f"reconstruction_loss_{self.recon_loss.loss_type}"]
+                recon_loss_value_2 = recon_loss_dict_2[f"reconstruction_loss_{self.recon_loss.loss_type}"]
+                total_loss.update({"recon_loss": (recon_loss_value_1 + recon_loss_value_2) / 2})
+                
+                if self.current_epoch < self.optim_configs.dissparcons_start_epoch:
+                    recon_reg_loss_dict = self.recon_reg_loss(manifolds_features_1, manifolds_features_2)
+                    recon_reg_loss_value = recon_reg_loss_dict["recon_reg_loss"]
+                    total_loss.update({"recon_reg_loss": recon_reg_loss_value})
+            
+            # compute other dfm losses after 'dissparcons_start_epoch's, i.e., distance, sparsity, consistency
+            if self.current_epoch >= self.optim_configs.dissparcons_start_epoch:
+                self.beta_1 = self.loss_configs.DistanceSparsity.beta_1_start * (1 + (1 - 1 / (batch_idx + 1)))\
+                            if self.beta_1 < self.loss_configs.DistanceSparsity.beta_1_end\
+                            else self.loss_configs.DistanceSparsity.beta_1_end
+                beta_2 = (self.beta_1 - 1 / (self.current_epoch + 1))\
+                            if (self.beta_1 - 1 / (self.current_epoch + 1)) > 0 else 0
+                beta_2 = self.loss_configs.ConsistencyLoss.beta_2_max\
+                            if beta_2 > self.loss_configs.ConsistencyLoss.beta_2_max\
+                            else beta_2
+                beta_3 = self.loss_configs.ReconRegLoss.beta_3_max - beta_2
+                self.distance_loss.set_coef(self.beta_1)
+                self.sparsity_loss.set_coef(self.beta_1)
+                self.consistency_loss.set_coef(beta_2)
+                self.recon_reg_loss.set_coef(beta_3)
+
+                logger.debug(f"Distance loss coefficient set to: {self.distance_loss.coef}")
+                logger.debug(f"Sparsity loss coefficient set to: {self.sparsity_loss.coef}")
+                logger.debug(f"Consistency loss coefficient set to: {self.consistency_loss.coef}")
+                logger.debug(f"Reconstruction regularization loss coefficient set to: {self.recon_reg_loss.coef}")
+
+                distance_loss_dict = self.distance_loss(manifolds_features_1, manifolds_features_2,
+                                                        x2_manifold_indices)
+                distance_loss_value = distance_loss_dict["distance_loss"]
+                total_loss.update({"distance_loss": distance_loss_value})
+
+                sparsity_loss_dict = self.sparsity_loss(manifolds_features_1, manifolds_features_2)
+                sparsity_loss_value = sparsity_loss_dict["sparsity_loss"]
+                total_loss.update({"sparsity_loss": sparsity_loss_value})
+
+                # prepare S_hat for all the manifolds, consistency loss
+                S_hat = torch.tensor([]).to(manifolds_features_1)
+                for manifold_idx in range(manifolds_features_1.size(0)):
+                    remaining_indices = torch.tensor([idx for idx in range(manifolds_features_1.size(0))\
+                                                        if idx != manifold_idx]).to(manifolds_features_1.device)
+
+                    logger.debug(f"manifold_idx: {manifold_idx}; remaining_indices: {remaining_indices}")
+
+                    if self.model.dfm_aggr == "SUM":
+                        aggr_12 = torch.cat((manifolds_features_1[[manifold_idx], :, :],
+                                                manifolds_features_2[remaining_indices, :, :]),
+                                                dim=0).sum(dim=0)
+                        
+                        logger.debug(f"aggr_12 shape: {aggr_12.size()}")
+                    else: # self.model.dfm_aggr == "CONCAT"
+                        aggr_12 = []
+                        aggr_12.append(manifolds_features_1[manifold_idx, :, :])
+                        for remaining_idx in remaining_indices:
+                            aggr_12.append(manifolds_features_2[remaining_idx, :, :])
+                        aggr_12 = torch.hstack(aggr_12)
+                        
+                        logger.debug(f"aggr_12 shape: {aggr_12.size()}")
+                    
+                    X_s_hat = self.model.dfm_decoder(aggr_12)
+                    f_12 = self.model.dfm_encoder(X_s_hat)
+                    S_manifold_idx = self.model.orthogonal_manifolds[manifold_idx](f_12)
+                    S_hat = torch.cat((S_hat, S_manifold_idx.unsqueeze(0)), dim=0)
+
+                logger.debug(f"S_hat shape: {S_hat.size()}")
+
+                consistency_loss_dict = self.consistency_loss(S_hat, manifolds_features_1)
+                consistency_loss_value = consistency_loss_dict["consistency_loss"]
+                total_loss.update({"consistency_loss": consistency_loss_value})
+
+                if self.use_recon_reg_loss:
+                    recon_reg_loss_dict = self.recon_reg_loss(manifolds_features_1, manifolds_features_2)
+                    recon_reg_loss_value = recon_reg_loss_dict["recon_reg_loss"]
+                    total_loss.update({"recon_reg_loss": recon_reg_loss_value})
+
+            self.log_dict(total_loss, prog_bar=True)
         elif self.model_mode == "SVD":
             self.__check_network_grad__()
 
@@ -346,10 +464,11 @@ class DFDDFMTrainer(LTN.LightningModule):
 
         return total_loss_value
 
-    def __val_test_common_step__(self, batch: torch.Tensor):
+    def __val_test_common_step__(self, batch: torch.Tensor,
+                                 step_mode: Literal["val", "test"] = "val"):
         total_loss = {}
         total_performance = {}
-        if self.model_mode == "SVDDFM":
+        if self.model_mode == "SVDDFM" or self.model_mode == "SVD_DFM":
             self.__check_network_grad__()
 
             y_hat_1, encoder_features_1, decoder_features_1, manifolds_features_1,\
@@ -365,83 +484,89 @@ class DFDDFMTrainer(LTN.LightningModule):
             accuracy = (accuracy_1 + accuracy_2) / 2
             roc_auc = (roc_auc_1 + roc_auc_2) / 2
             total_performance.update({"accuracy": accuracy, "roc_auc": roc_auc})
+            
+            if step_mode == "val":
+                # COMPUTE ALL LOSSES
+                if self.svd_dfm_with_dfd or (self.model_mode == "SVDDFM"):
+                    # compute dfd and svd losses
+                    dfd_loss_dict_1 = self.dfd_loss(y_hat_1, y_1)
+                    dfd_loss_dict_2 = self.dfd_loss(y_hat_2, y_2)
+                    dfd_loss_value_1 = dfd_loss_dict_1["dfd_loss"]
+                    dfd_loss_value_2 = dfd_loss_dict_2["dfd_loss"]
+                    total_loss.update({"dfd_loss": (dfd_loss_value_1 + dfd_loss_value_2) / 2})
+                if self.model_mode == "SVDDFM":
+                    # compute svd losses
+                    svd_losses_dict = self.svd_loss(self.model)
+                    svd_losses_value = svd_losses_dict["svd_losses_orth_keepsv"]
+                    total_loss.update({"svd_losses": svd_losses_value})
 
-            # COMPUTE ALL LOSSES
-            # compute dfd and svd losses
-            dfd_loss_dict_1 = self.dfd_loss(y_hat_1, y_1)
-            dfd_loss_dict_2 = self.dfd_loss(y_hat_2, y_2)
-            dfd_loss_value_1 = dfd_loss_dict_1["dfd_loss"]
-            dfd_loss_value_2 = dfd_loss_dict_2["dfd_loss"]
-            total_loss.update({"dfd_loss": (dfd_loss_value_1 + dfd_loss_value_2) / 2})
-            svd_losses_dict = self.svd_loss(self.model)
-            svd_losses_value = svd_losses_dict["svd_losses_orth_keepsv"]
-            total_loss.update({"svd_losses": svd_losses_value})
+                # compute dfm reconstruction and regularization losses
+                if self.current_epoch >= self.optim_configs.dfm_start_epoch:
+                    if self.do_reconstruction:
+                        recon_loss_dict_1 = self.recon_loss(decoder_features_1, encoder_features_1)
+                        recon_loss_dict_2 = self.recon_loss(decoder_features_2, encoder_features_2)
+                        recon_loss_value_1 = recon_loss_dict_1[f"reconstruction_loss_{self.recon_loss.loss_type}"]
+                        recon_loss_value_2 = recon_loss_dict_2[f"reconstruction_loss_{self.recon_loss.loss_type}"]
+                        total_loss.update({"recon_loss": (recon_loss_value_1 + recon_loss_value_2)})
+                        if self.use_recon_reg_loss:
+                            recon_reg_loss_dict = self.recon_reg_loss(manifolds_features_1, manifolds_features_2)
+                            recon_reg_loss_value = recon_reg_loss_dict["recon_reg_loss"]
+                            total_loss.update({"recon_reg_loss": recon_reg_loss_value})
+                    
+                    # compute other dfm losses after 'dissparcons_start_epoch's, i.e., distance, sparsity, consistency
+                    if self.current_epoch >= self.optim_configs.dissparcons_start_epoch:
+                        distance_loss_dict = self.distance_loss(manifolds_features_1, manifolds_features_2,
+                                                                x2_manifold_indices)
+                        distance_loss_value = distance_loss_dict["distance_loss"]
+                        total_loss.update({"distance_loss": distance_loss_value})
 
-            # compute dfm reconstruction and regularization losses
-            if self.current_epoch >= self.optim_configs.dfm_start_epoch:
-                if self.do_reconstruction:
-                    recon_loss_dict_1 = self.recon_loss(decoder_features_1, encoder_features_1)
-                    recon_loss_dict_2 = self.recon_loss(decoder_features_2, encoder_features_2)
-                    recon_loss_value_1 = recon_loss_dict_1[f"reconstruction_loss_{self.recon_loss.loss_type}"]
-                    recon_loss_value_2 = recon_loss_dict_2[f"reconstruction_loss_{self.recon_loss.loss_type}"]
-                    total_loss.update({"recon_loss": (recon_loss_value_1 + recon_loss_value_2)})
-                    if self.use_recon_reg_loss:
-                        recon_reg_loss_dict = self.recon_reg_loss(manifolds_features_1, manifolds_features_2)
-                        recon_reg_loss_value = recon_reg_loss_dict["recon_reg_loss"]
-                        total_loss.update({"recon_reg_loss": recon_reg_loss_value})
-                
-                # compute other dfm losses after 'dissparcons_start_epoch's, i.e., distance, sparsity, consistency
-                if self.current_epoch >= self.optim_configs.dissparcons_start_epoch:
-                    distance_loss_dict = self.distance_loss(manifolds_features_1, manifolds_features_2,
-                                                            x2_manifold_indices)
-                    distance_loss_value = distance_loss_dict["distance_loss"]
-                    total_loss.update({"distance_loss": distance_loss_value})
+                        sparsity_loss_dict = self.sparsity_loss(manifolds_features_1, manifolds_features_2)
+                        sparsity_loss_value = sparsity_loss_dict["sparsity_loss"]
+                        total_loss.update({"sparsity_loss": sparsity_loss_value})
 
-                    sparsity_loss_dict = self.sparsity_loss(manifolds_features_1, manifolds_features_2)
-                    sparsity_loss_value = sparsity_loss_dict["sparsity_loss"]
-                    total_loss.update({"sparsity_loss": sparsity_loss_value})
+                        # prepare S_hat for all the manifolds, consistency loss
+                        S_hat = torch.tensor([]).to(manifolds_features_1)
+                        for manifold_idx in range(manifolds_features_1.size(0)):
+                            remaining_indices = torch.tensor([idx for idx in range(manifolds_features_1.size(0))\
+                                                            if idx != manifold_idx]).to(manifolds_features_1.device)
+                            if self.model.dfm_aggr == "SUM":
+                                aggr_12 = torch.cat((manifolds_features_1[[manifold_idx], :, :],
+                                                        manifolds_features_2[remaining_indices, :, :]),
+                                                        dim=0).sum(dim=0)
+                            else: # self.model.dfm_aggr == "CONCAT"
+                                aggr_12 = []
+                                aggr_12.append(manifolds_features_1[manifold_idx, :, :])
+                                for remaining_idx in remaining_indices:
+                                    aggr_12.append(manifolds_features_2[remaining_idx, :, :])
+                                aggr_12 = torch.hstack(aggr_12)
+                            X_s_hat = self.model.dfm_decoder(aggr_12)
+                            f_12 = self.model.dfm_encoder(X_s_hat)
+                            S_manifold_idx = self.model.orthogonal_manifolds[manifold_idx](f_12)
+                            S_hat = torch.cat((S_hat, S_manifold_idx.unsqueeze(0)), dim=0)
+                        consistency_loss_dict = self.consistency_loss(S_hat, manifolds_features_1)
+                        consistency_loss_value = consistency_loss_dict["consistency_loss"]
+                        total_loss.update({"consistency_loss": consistency_loss_value})
 
-                    # prepare S_hat for all the manifolds, consistency loss
-                    S_hat = torch.tensor([]).to(manifolds_features_1)
-                    for manifold_idx in range(manifolds_features_1.size(0)):
-                        remaining_indices = torch.tensor([idx for idx in range(manifolds_features_1.size(0))\
-                                                        if idx != manifold_idx]).to(manifolds_features_1.device)
-                        if self.model.dfm_aggr == "SUM":
-                            aggr_12 = torch.cat((manifolds_features_1[[manifold_idx], :, :],
-                                                    manifolds_features_2[remaining_indices, :, :]),
-                                                    dim=0).sum(dim=0)
-                        else: # self.model.dfm_aggr == "CONCAT"
-                            aggr_12 = []
-                            aggr_12.append(manifolds_features_1[manifold_idx, :, :])
-                            for remaining_idx in remaining_indices:
-                                aggr_12.append(manifolds_features_2[remaining_idx, :, :])
-                            aggr_12 = torch.hstack(aggr_12)
-                        X_s_hat = self.model.dfm_decoder(aggr_12)
-                        f_12 = self.model.dfm_encoder(X_s_hat)
-                        S_manifold_idx = self.model.orthogonal_manifolds[manifold_idx](f_12)
-                        S_hat = torch.cat((S_hat, S_manifold_idx.unsqueeze(0)), dim=0)
-                    consistency_loss_dict = self.consistency_loss(S_hat, manifolds_features_1)
-                    consistency_loss_value = consistency_loss_dict["consistency_loss"]
-                    total_loss.update({"consistency_loss": consistency_loss_value})
-
-                    if self.use_recon_reg_loss:
-                        recon_reg_loss_dict = self.recon_reg_loss(manifolds_features_1, manifolds_features_2)
-                        recon_reg_loss_value = recon_reg_loss_dict["recon_reg_loss"]
-                        total_loss.update({"recon_reg_loss": recon_reg_loss_value})
+                        if self.use_recon_reg_loss:
+                            recon_reg_loss_dict = self.recon_reg_loss(manifolds_features_1, manifolds_features_2)
+                            recon_reg_loss_value = recon_reg_loss_dict["recon_reg_loss"]
+                            total_loss.update({"recon_reg_loss": recon_reg_loss_value})
         elif self.model_mode == "SVD":
             self.__check_network_grad__()
 
-            self.__svd_linear_validation_step__(batch, total_performance, total_loss)
+            self.__svd_linear_validation_step__(batch, total_performance, total_loss, step_mode)
         elif self.model_mode == "FEAT_LINEAR":
             self.__check_network_grad__()
 
-            self.__svd_linear_validation_step__(batch, total_performance, total_loss)
+            self.__svd_linear_validation_step__(batch, total_performance, total_loss, step_mode)
 
         val_test_results = total_performance | total_loss
 
         self.log_dict(val_test_results, prog_bar=True)
 
-    def __svd_linear_validation_step__(self, batch, total_performance, total_loss):
+    def __svd_linear_validation_step__(self, batch,
+                                       total_performance, total_loss,
+                                       step_mode: Literal["val", "test"] = "val"):
         x_pair, _, y_pair = batch  # x2_manifold_indices
         x_1, x_2 = x_pair
         y_1, y_2 = y_pair
@@ -459,24 +584,25 @@ class DFDDFMTrainer(LTN.LightningModule):
         roc_auc = (roc_auc_1 + roc_auc_2) / 2
         total_performance.update({"accuracy": accuracy, "roc_auc": roc_auc})
         
-        # COMPUTE ALL LOSSES
-        # compute dfd loss
-        dfd_loss_dict_1 = self.dfd_loss(y_hat_1, y_1)
-        dfd_loss_dict_2 = self.dfd_loss(y_hat_2, y_2)
-        dfd_loss_value_1 = dfd_loss_dict_1["dfd_loss"]
-        dfd_loss_value_2 = dfd_loss_dict_2["dfd_loss"]
-        total_loss.update({"dfd_loss": (dfd_loss_value_1 + dfd_loss_value_2) / 2})
-        # compute svd loss
-        if self.model_mode != "FEAT_LINEAR" and self.model_mode != "FEAT":
-            svd_losses_dict = self.svd_loss(self.model)
-            svd_losses_value = svd_losses_dict["svd_losses_orth_keepsv"]
-            total_loss.update({"svd_losses": svd_losses_value})
+        if step_mode == "val":
+            # COMPUTE ALL LOSSES
+            # compute dfd loss
+            dfd_loss_dict_1 = self.dfd_loss(y_hat_1, y_1)
+            dfd_loss_dict_2 = self.dfd_loss(y_hat_2, y_2)
+            dfd_loss_value_1 = dfd_loss_dict_1["dfd_loss"]
+            dfd_loss_value_2 = dfd_loss_dict_2["dfd_loss"]
+            total_loss.update({"dfd_loss": (dfd_loss_value_1 + dfd_loss_value_2) / 2})
+            # compute svd loss
+            if self.model_mode != "FEAT_LINEAR" and self.model_mode != "FEAT":
+                svd_losses_dict = self.svd_loss(self.model)
+                svd_losses_value = svd_losses_dict["svd_losses_orth_keepsv"]
+                total_loss.update({"svd_losses": svd_losses_value})
 
     def validation_step(self, batch: torch.Tensor):
         self.__val_test_common_step__(batch)
 
     def test_step(self, batch: torch.Tensor):
-        self.__val_test_common_step__(batch)
+        self.__val_test_common_step__(batch, step_mode="test")
 
     def predict_step(self, batch: List[Image]):
         pass
