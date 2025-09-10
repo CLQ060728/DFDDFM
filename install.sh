@@ -24,3 +24,4 @@ rm -rf pre_trained/META_DINOV3/LVD/temp/
 rm -rf pre_trained/META_DINOV3/SAT/temp/
 pip cache purge
 git update-index --skip-worktree configs/default_config.yaml
+mkdir -p logs/
