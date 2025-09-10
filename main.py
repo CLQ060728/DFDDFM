@@ -40,6 +40,8 @@ class DFDDFMTrainer(LTN.LightningModule):
                 optim_configs: Configuration dictionary for the optimizer.
         """
         super(DFDDFMTrainer, self).__init__()
+        self.save_hyperparameters()
+        
         self.model_mode = model_mode
         self.learning_rate = optim_configs.get("learning_rate", 2e-4)
         self.do_reconstruction = optim_configs.get("do_reconstruction", False)
