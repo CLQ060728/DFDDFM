@@ -66,16 +66,13 @@ class DFDDFMTrainer(LTN.LightningModule):
         self.__get_all_training_objects__()  # Initialize model and losses
     
     def __check_model_grad__(self, model):
-        total_frozen_params = 0
-        total_trainable_params = 0
-        for _, param in model.named_parameters():
-            if param.requires_grad:
-                total_trainable_params += 1
-            else:
-                total_frozen_params += 1
-        
-        logger.info(f"Total trainable params: {total_trainable_params}")
-        logger.info(f"Total frozen params: {total_frozen_params}")
+        total_params = sum(p.numel() for p in model.parameters())
+        trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        frozen_params = total_params - trainable_params
+
+        logger.info(f"Total params: {total_params}")
+        logger.info(f"Total trainable params: {trainable_params}")
+        logger.info(f"Total frozen params: {frozen_params}")
 
     def __get_all_training_objects__(self):
         if self.model_mode == "SVD":
@@ -228,17 +225,15 @@ class DFDDFMTrainer(LTN.LightningModule):
         total_frozen_params = 0
         total_trainable_params = 0
         if self.model_mode == "SVDDFM" or self.model_mode == "SVD":
-            for _, param in self.model.named_parameters():
-                if param.requires_grad:
-                    total_trainable_params += 1
-                else:
-                    total_frozen_params += 1
+            total_params = sum(p.numel() for p in self.model.parameters())
+            total_trainable_params += sum(p.numel() for p in self.model.parameters()
+                                          if p.requires_grad)
+            total_frozen_params += total_params - total_trainable_params
         elif self.model_mode == "FEAT" or self.model_mode == "FEAT_LINEAR":
-            for _, param in self.feat_extractor.named_parameters():
-                if param.requires_grad:
-                    total_trainable_params += 1
-                else:
-                    total_frozen_params += 1
+            total_params = sum(p.numel() for p in self.feat_extractor.parameters())
+            total_trainable_params += sum(p.numel() for p in self.feat_extractor.parameters()
+                                          if p.requires_grad)
+            total_frozen_params += total_params - total_trainable_params
         
         logger.debug(f"{self.model_mode}, Total trainable params: {total_trainable_params}")
         logger.debug(f"{self.model_mode}, Total frozen params: {total_frozen_params}")
@@ -674,7 +669,7 @@ def cli_main():
 
 if __name__ == "__main__":
     os.makedirs("./output", exist_ok=True)
-    logging.basicConfig(filename='./logs/main.log', level=logging.INFO)
+    # logging.basicConfig(filename='./logs/main.log', level=logging.INFO)
     torch.set_float32_matmul_precision('high')
     # configure logging at the root level of lightning
     # logging.getLogger("pytorch_lightning").setLevel(logging.INFO)
