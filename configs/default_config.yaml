@@ -16,15 +16,21 @@ trainer:
         filename: "best-{epoch:02d}-accuracy-{accuracy:.4f}"    # 
     - class_path: lightning.pytorch.callbacks.ModelCheckpoint
       init_args:
-        monitor: "roc_auc"           # validation metric, e.g. "roc_auc", logged by self.log("roc_auc", roc_auc, prog_bar=True)
+        monitor: "f1"           # validation metric, e.g. "f1", logged by self.log("f1", f1, prog_bar=True)
         mode: "max"                   # "min" for loss, "max" for accuracy
         save_top_k: 1                 # save only the best model
-        filename: "best-{epoch:02d}-roc_auc-{roc_auc:.4f}"     # 
+        filename: "best-{epoch:02d}-f1-{f1:.4f}"     # 
     - class_path: lightning.pytorch.callbacks.ModelCheckpoint
       init_args:
-        every_n_epochs: 50            # save every 50 epochs
-        save_top_k: -1                # save all checkpoints at this frequency
-        filename: "epoch{epoch:02d}"
+        monitor: "precision"           # validation metric, e.g. "precision", logged by self.log("precision", precision, prog_bar=True)
+        mode: "max"                   # "min" for loss, "max" for accuracy
+        save_top_k: 1                 # save only the best model
+        filename: "best-{epoch:02d}-precision-{precision:.4f}"     #
+    # - class_path: lightning.pytorch.callbacks.ModelCheckpoint
+    #   init_args:
+    #     every_n_epochs: 50            # save every 50 epochs
+    #     save_top_k: -1                # save all checkpoints at this frequency
+    #     filename: "epoch{epoch:02d}"
     - class_path: lightning.pytorch.callbacks.TQDMProgressBar
       init_args:
         refresh_rate: 10              # how often to update the progress bar (in steps)
@@ -75,7 +81,7 @@ model:
   svd_dfm:
     svd_dfm_with_dfd: true                         # whether to use DFD loss when model_mode is 'SVD_DFM'
     svd_chkpt_path: null                           # the path to the pretrained SVD model checkpoint, if None, train from scratch
-  model_type: CLIP                             # ['CLIP', 'DINO_V2', 'DINO_V3'], the pretrained model type to use
+  model_type: DINO_V2                             # ['CLIP', 'DINO_V2', 'DINO_V3'], the pretrained model type to use
   feat_extractor_type: null                       # ['CLIP', 'DINO_V2', 'DINO_V3'], the pretrained model type to use when model_mode is 'FEAT' or 'FEAT_LINEAR'
   model_configs: 
     ClipSVDDFM:                                    # CLIP model for both SVD and SVDDFM
@@ -131,7 +137,7 @@ model:
     dissparcons_start_epoch: 66                    # starting epoches to use distance,  sparcity and consistency losses and also the regularization loss when it's enabled
   inference_configs: {}
 data:
-  model_type: 'CLIP'                                  # ["CLIP", "DINO_V2", "DINO_V3_LVD", "DINO_V3_SAT"] for image transformations, different models have different types
+  model_type: 'DINO_V2'                                  # ["CLIP", "DINO_V2", "DINO_V3_LVD", "DINO_V3_SAT"] for image transformations, different models have different types
   train_dataset_path: '/root/WORKSPACE/DFDDFM/data/train/'   # ['data/train']
   val_dataset_path: '/root/WORKSPACE/DFDDFM/data/val/'       # ['data/val']
   test_dataset_path: '/root/WORKSPACE/DFDDFM/data/test/'     # ['data/test']
@@ -140,5 +146,5 @@ data:
     - 'mix'
   manifolds_indices_path: 'data/manifolds_indices_2.json' # str The path to the mapping of the corresponding manifolds' indices.
   batch_size: 160                                   # batch size for training
-  num_workers: 4                                   # number of workers for data loading
+  num_workers: 8                                   # number of workers for data loading
 
