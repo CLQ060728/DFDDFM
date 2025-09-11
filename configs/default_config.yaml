@@ -2,7 +2,7 @@
 seed_everything: 88
 trainer:
   accelerator: auto
-  strategy: auto
+  strategy: 'ddp_spawn'   # 'ddp', 'ddp_spawn', 'deepspeed_stage_2', 'deepspeed_stage_3', 'fsdp', 'fsdp_sharded', 'fsdp_sharded_wrap', 'ddp2', 'dp'
   devices: auto
   num_nodes: 1
   precision: null
@@ -38,7 +38,7 @@ trainer:
     #   init_args:
     #     max_depth: -1      # detailed model summary for sub modules, default is 1
   fast_dev_run: false
-  max_epochs: 100
+  max_epochs: 50
   min_epochs: null
   max_steps: -1
   min_steps: null
@@ -71,11 +71,11 @@ trainer:
   default_root_dir: './output/'
   model_registry: null
 model:
-  model_mode: SVDDFM                              # ['SVDDFM', 'SVD_DFM', 'SVD', 'FEAT_LINEAR', 'FEAT'], the model type to use
+  model_mode: SVD                              # ['SVDDFM', 'SVD_DFM', 'SVD', 'FEAT_LINEAR', 'FEAT'], the model type to use
   svd_dfm:
     svd_dfm_with_dfd: true                         # whether to use DFD loss when model_mode is 'SVD_DFM'
     svd_chkpt_path: null                           # the path to the pretrained SVD model checkpoint, if None, train from scratch
-  model_type: DINO_V3                             # ['CLIP', 'DINO_V2', 'DINO_V3'], the pretrained model type to use
+  model_type: CLIP                             # ['CLIP', 'DINO_V2', 'DINO_V3'], the pretrained model type to use
   feat_extractor_type: null                       # ['CLIP', 'DINO_V2', 'DINO_V3'], the pretrained model type to use when model_mode is 'FEAT' or 'FEAT_LINEAR'
   model_configs: 
     ClipSVDDFM:                                    # CLIP model for both SVD and SVDDFM
@@ -131,14 +131,14 @@ model:
     dissparcons_start_epoch: 66                    # starting epoches to use distance,  sparcity and consistency losses and also the regularization loss when it's enabled
   inference_configs: {}
 data:
-  model_type: 'DINO_V3_LVD'                                  # ["CLIP", "DINO_V2", "DINO_V3_LVD", "DINO_V3_SAT"] for image transformations, different models have different types
+  model_type: 'CLIP'                                  # ["CLIP", "DINO_V2", "DINO_V3_LVD", "DINO_V3_SAT"] for image transformations, different models have different types
   train_dataset_path: '/root/WORKSPACE/DFDDFM/data/train/'   # ['data/train']
   val_dataset_path: '/root/WORKSPACE/DFDDFM/data/val/'       # ['data/val']
   test_dataset_path: '/root/WORKSPACE/DFDDFM/data/test/'     # ['data/test']
   manifolds_paths:                                           # List[str] the paths to the manifolds images paths
     - 'Real'
-    - 'Midjourney'
-  manifolds_indices_path: 'data/manifolds_indices_1.json' # str The path to the mapping of the corresponding manifolds' indices.
-  batch_size: 50                                   # batch size for training
-  num_workers: 2                                   # number of workers for data loading
+    - 'mix'
+  manifolds_indices_path: 'data/manifolds_indices_2.json' # str The path to the mapping of the corresponding manifolds' indices.
+  batch_size: 160                                   # batch size for training
+  num_workers: 4                                   # number of workers for data loading
 

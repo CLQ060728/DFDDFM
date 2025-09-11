@@ -18,6 +18,7 @@ from Utils.UtilFunctions import ConfigDict
 import logging, os
 
 logger = logging.getLogger(__name__)
+torch.set_float32_matmul_precision('high')
 
 
 class DFDDFMTrainer(LTN.LightningModule):
@@ -670,7 +671,6 @@ def cli_main():
 if __name__ == "__main__":
     os.makedirs("./output", exist_ok=True)
     # logging.basicConfig(filename='./logs/main.log', level=logging.INFO)
-    torch.set_float32_matmul_precision('high')
     # configure logging at the root level of lightning
     # logging.getLogger("pytorch_lightning").setLevel(logging.INFO)
 
