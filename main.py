@@ -273,7 +273,7 @@ class DFDDFMTrainer(LTN.LightningModule):
                 self.model_mode = "SVDDFM"
                 self.model.dfm = True
 
-                self.log_dict(total_loss, prog_bar=True)
+                self.log_dict(total_loss, prog_bar=True, sync_dist=True)
                 logger.debug(f"Model type set to: {self.model_type}; Model DFM set to: {self.model.dfm}")
             else:
                 logger.debug(f"Epoch {self.current_epoch}: Training with full SVDDFM model")
@@ -375,7 +375,7 @@ class DFDDFMTrainer(LTN.LightningModule):
                         recon_reg_loss_value = recon_reg_loss_dict["recon_reg_loss"]
                         total_loss.update({"recon_reg_loss": recon_reg_loss_value})
 
-                self.log_dict(total_loss, prog_bar=True)
+                self.log_dict(total_loss, prog_bar=True, sync_dist=True)
         elif self.model_mode == "SVD_DFM":
             logger.debug(f"Epoch {self.current_epoch}: Training with SVD_DFM model")
 
@@ -474,7 +474,7 @@ class DFDDFMTrainer(LTN.LightningModule):
                     recon_reg_loss_value = recon_reg_loss_dict["recon_reg_loss"]
                     total_loss.update({"recon_reg_loss": recon_reg_loss_value})
 
-            self.log_dict(total_loss, prog_bar=True)
+            self.log_dict(total_loss, prog_bar=True, sync_dist=True)
         elif self.model_mode == "SVD":
             self.__check_network_grad__()
 
@@ -483,7 +483,7 @@ class DFDDFMTrainer(LTN.LightningModule):
             self.__svd_linear_training_step__(batch, total_loss)
 
             logger.debug(f"total_loss after __svd_linear_training_step__: {total_loss}")
-            self.log_dict(total_loss, prog_bar=True)
+            self.log_dict(total_loss, prog_bar=True, sync_dist=True)
         elif self.model_mode == "FEAT_LINEAR":
             self.__check_network_grad__()
 
@@ -492,7 +492,7 @@ class DFDDFMTrainer(LTN.LightningModule):
             self.__svd_linear_training_step__(batch, total_loss)
 
             logger.debug(f"total_loss after __svd_linear_training_step__: {total_loss}")
-            self.log_dict(total_loss, prog_bar=True)
+            self.log_dict(total_loss, prog_bar=True, sync_dist=True)
 
         total_loss_value = sum(total_loss.values()) if len(total_loss) > 0 else None
 
@@ -605,7 +605,7 @@ class DFDDFMTrainer(LTN.LightningModule):
 
         val_test_results = total_performance | total_loss
 
-        self.log_dict(val_test_results, prog_bar=True)
+        self.log_dict(val_test_results, prog_bar=True, sync_dist=True)
 
     def __svd_linear_validation_step__(self, batch,
                                        total_performance, total_loss,
