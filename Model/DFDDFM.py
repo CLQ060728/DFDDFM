@@ -175,7 +175,7 @@ class Dinov3SVDDFM(BaseSVDDFM, nn.Module):
         else:  # self.model_type == "SAT"
             pretrained_path = self.chkpt_dir + "SAT/"
         
-        self.feat_model = AutoModel.from_pretrained(pretrained_path, device_map="auto")   
+        self.feat_model = AutoModel.from_pretrained(pretrained_path, device_map="cuda")   
         self.feat_model.requires_grad_(False)
         self.feat_model = self.replace_svd_residual_to_attn_linear(self.feat_model, 1023)
         # self.feat_model = self.feat_model.to(self.device)
