@@ -7,7 +7,7 @@ import torch
 import torch.nn.functional as F
 # from torch.optim.lr_scheduler import CosineAnnealingLR
 import lightning as LTN
-from torchmetrics.functional.classification import binary_accuracy, binary_auroc
+from torchmetrics.functional.classification import binary_accuracy, binary_f1_score, binary_precision
 from lightning.pytorch.cli import LightningCLI
 from Model.DFDDFM import ClipSVDDFM, Dinov2SVDDFM, Dinov3SVDDFM
 from Model.FeatureExtractors import ClipFeatureExtractor, Dinov2FeatureExtractor, Dinov3FeatureExtractor
@@ -511,15 +511,18 @@ class DFDDFMTrainer(LTN.LightningModule):
                 x2_manifold_indices, y_pair = self(batch)
             y_1, y_2 = y_pair
 
-            # compute accuracy and ROC-AUC
+            # compute accuracy, f1, precision
             accuracy_1 = binary_accuracy(F.sigmoid(y_hat_1), y_1.long())
             accuracy_2 = binary_accuracy(F.sigmoid(y_hat_2), y_2.long())
-            roc_auc_1 = binary_auroc(F.sigmoid(y_hat_1), y_1.long())
-            roc_auc_2 = binary_auroc(F.sigmoid(y_hat_2), y_2.long())
+            f1_1 = binary_f1_score(F.sigmoid(y_hat_1), y_1.long())
+            f1_2 = binary_f1_score(F.sigmoid(y_hat_2), y_2.long())
+            precision_1 = binary_precision(F.sigmoid(y_hat_1), y_1.long())
+            precision_2 = binary_precision(F.sigmoid(y_hat_2), y_2.long())
             accuracy = (accuracy_1 + accuracy_2) / 2
-            roc_auc = (roc_auc_1 + roc_auc_2) / 2
-            total_performance.update({"accuracy": accuracy, "roc_auc": roc_auc})
-            
+            f1 = (f1_1 + f1_2) / 2
+            precision = (precision_1 + precision_2) / 2
+            total_performance.update({"accuracy": accuracy, "f1": f1, "precision": precision})
+
             if step_mode == "val":
                 # COMPUTE ALL LOSSES
                 if self.svd_dfm_with_dfd or (self.model_mode == "SVDDFM"):
@@ -610,14 +613,17 @@ class DFDDFMTrainer(LTN.LightningModule):
         y_hat_1, y_1 = self(batch_1)
         y_hat_2, y_2 = self(batch_2)
 
-        # compute accuracy and ROC-AUC
+        # compute accuracy f1, precision
         accuracy_1 = binary_accuracy(F.sigmoid(y_hat_1), y_1.long())
         accuracy_2 = binary_accuracy(F.sigmoid(y_hat_2), y_2.long())
-        roc_auc_1 = binary_auroc(F.sigmoid(y_hat_1), y_1.long())
-        roc_auc_2 = binary_auroc(F.sigmoid(y_hat_2), y_2.long())
+        f1_1 = binary_f1_score(F.sigmoid(y_hat_1), y_1.long())
+        f1_2 = binary_f1_score(F.sigmoid(y_hat_2), y_2.long())
+        precision_1 = binary_precision(F.sigmoid(y_hat_1), y_1.long())
+        precision_2 = binary_precision(F.sigmoid(y_hat_2), y_2.long())
         accuracy = (accuracy_1 + accuracy_2) / 2
-        roc_auc = (roc_auc_1 + roc_auc_2) / 2
-        total_performance.update({"accuracy": accuracy, "roc_auc": roc_auc})
+        f1 = (f1_1 + f1_2) / 2
+        precision = (precision_1 + precision_2) / 2
+        total_performance.update({"accuracy": accuracy, "f1": f1, "precision": precision})
         
         if step_mode == "val":
             # COMPUTE ALL LOSSES
