@@ -7,7 +7,8 @@ import torch
 import torch.nn.functional as F
 # from torch.optim.lr_scheduler import CosineAnnealingLR
 import lightning as LTN
-from torchmetrics.functional.classification import binary_accuracy, binary_f1_score, binary_precision
+from torchmetrics.functional.classification import binary_accuracy, binary_f1_score
+from torchmetrics.functional.classification import binary_precision, binary_recall
 from lightning.pytorch.cli import LightningCLI
 from Model.DFDDFM import ClipSVDDFM, Dinov2SVDDFM, Dinov3SVDDFM
 from Model.FeatureExtractors import ClipFeatureExtractor, Dinov2FeatureExtractor, Dinov3FeatureExtractor
@@ -518,10 +519,14 @@ class DFDDFMTrainer(LTN.LightningModule):
             f1_2 = binary_f1_score(F.sigmoid(y_hat_2), y_2.long())
             precision_1 = binary_precision(F.sigmoid(y_hat_1), y_1.long())
             precision_2 = binary_precision(F.sigmoid(y_hat_2), y_2.long())
+            recall_1 = binary_recall(F.sigmoid(y_hat_1), y_1.long())
+            recall_2 = binary_recall(F.sigmoid(y_hat_2), y_2.long())
             accuracy = (accuracy_1 + accuracy_2) / 2
             f1 = (f1_1 + f1_2) / 2
             precision = (precision_1 + precision_2) / 2
-            total_performance.update({"accuracy": accuracy, "f1": f1, "precision": precision})
+            recall = (recall_1 + recall_2) / 2
+            total_performance.update({"accuracy": accuracy, "f1": f1,
+                                      "precision": precision, "recall": recall})
 
             if step_mode == "val":
                 # COMPUTE ALL LOSSES
@@ -620,11 +625,15 @@ class DFDDFMTrainer(LTN.LightningModule):
         f1_2 = binary_f1_score(F.sigmoid(y_hat_2), y_2.long())
         precision_1 = binary_precision(F.sigmoid(y_hat_1), y_1.long())
         precision_2 = binary_precision(F.sigmoid(y_hat_2), y_2.long())
+        recall_1 = binary_recall(F.sigmoid(y_hat_1), y_1.long())
+        recall_2 = binary_recall(F.sigmoid(y_hat_2), y_2.long())
         accuracy = (accuracy_1 + accuracy_2) / 2
         f1 = (f1_1 + f1_2) / 2
         precision = (precision_1 + precision_2) / 2
-        total_performance.update({"accuracy": accuracy, "f1": f1, "precision": precision})
-        
+        recall = (recall_1 + recall_2) / 2
+        total_performance.update({"accuracy": accuracy, "f1": f1,
+                                  "precision": precision, "recall": recall})
+
         if step_mode == "val":
             # COMPUTE ALL LOSSES
             # compute dfd loss

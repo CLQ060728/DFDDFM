@@ -26,6 +26,12 @@ trainer:
         mode: "max"                   # "min" for loss, "max" for accuracy
         save_top_k: 1                 # save only the best model
         filename: "best-{epoch:02d}-precision-{precision:.4f}"     #
+    - class_path: lightning.pytorch.callbacks.ModelCheckpoint
+      init_args:
+        monitor: "recall"           # validation metric, e.g. "recall", logged by self.log("recall", recall, prog_bar=True)
+        mode: "max"                   # "min" for loss, "max" for accuracy
+        save_top_k: 1                 # save only the best model
+        filename: "best-{epoch:02d}-recall-{recall:.4f}"     #
     # - class_path: lightning.pytorch.callbacks.ModelCheckpoint
     #   init_args:
     #     every_n_epochs: 50            # save every 50 epochs
