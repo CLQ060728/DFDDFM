@@ -583,30 +583,32 @@ class DFDDFMTrainer(LTN.LightningModule):
         semidx_y_dict_2 = {}
         for idx, semidx in enumerate(semantic_indices_1):
             if semidx.item() not in semidx_y_hat_dict_1:
-                semidx_y_hat_dict_1[semidx.item()] = torch.tensor(y_hat_1[[idx], :]).to(y_hat_1)
-                semidx_y_dict_1[semidx.item()] = torch.tensor(y_1[[idx], :]).to(y_1)
+                semidx_y_hat_dict_1[semidx.item()] = \
+                    torch.tensor(y_hat_1[[idx], :].detach().clone()).to(y_hat_1)
+                semidx_y_dict_1[semidx.item()] = torch.tensor(y_1[[idx], :].detach().clone()).to(y_1)
             else:
                 semidx_y_hat_dict_1[semidx.item()] = torch.cat([semidx_y_hat_dict_1[semidx.item()], 
-                                                                torch.tensor(y_hat_1[[idx], :]).to(y_hat_1)],
-                                                                dim=0)
+                                                torch.tensor(y_hat_1[[idx], :].detach().clone()).to(y_hat_1)],
+                                                               dim=0)
                 semidx_y_dict_1[semidx.item()] = torch.cat([semidx_y_dict_1[semidx.item()], 
-                                                                torch.tensor(y_1[[idx], :]).to(y_1)],
-                                                                dim=0)
+                                                torch.tensor(y_1[[idx], :].detach().clone()).to(y_1)],
+                                                            dim=0)
             
             logger.info(f"semidx_y_hat_dict_1[{semidx.item()}] size: {semidx_y_hat_dict_1[semidx.item()].size()}")
             logger.info(f"semidx_y_dict_1[{semidx.item()}] size: {semidx_y_dict_1[semidx.item()].size()}")
         
         for idx, semidx in enumerate(semantic_indices_2):
             if semidx.item() not in semidx_y_hat_dict_2:
-                semidx_y_hat_dict_2[semidx.item()] = torch.tensor(y_hat_2[[idx], :]).to(y_hat_2)
-                semidx_y_dict_2[semidx.item()] = torch.tensor(y_2[[idx], :]).to(y_2)
+                semidx_y_hat_dict_2[semidx.item()] = \
+                    torch.tensor(y_hat_2[[idx], :].detach().clone()).to(y_hat_2)
+                semidx_y_dict_2[semidx.item()] = torch.tensor(y_2[[idx], :].detach().clone()).to(y_2)
             else:
                 semidx_y_hat_dict_2[semidx.item()] = torch.cat([semidx_y_hat_dict_2[semidx.item()], 
-                                                                torch.tensor(y_hat_2[[idx], :]).to(y_hat_2)],
-                                                                dim=0)
+                                             torch.tensor(y_hat_2[[idx], :].detach().clone()).to(y_hat_2)],
+                                                               dim=0)
                 semidx_y_dict_2[semidx.item()] = torch.cat([semidx_y_dict_2[semidx.item()], 
-                                                                torch.tensor(y_2[[idx], :]).to(y_2)],
-                                                                dim=0)
+                                             torch.tensor(y_2[[idx], :].detach().clone()).to(y_2)],
+                                                           dim=0)
             
             logger.info(f"semidx_y_hat_dict_2[{semidx.item()}] size: {semidx_y_hat_dict_2[semidx.item()].size()}")
             logger.info(f"semidx_y_dict_2[{semidx.item()}] size: {semidx_y_dict_2[semidx.item()].size()}")
