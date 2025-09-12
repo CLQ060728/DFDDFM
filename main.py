@@ -563,11 +563,11 @@ class DFDDFMTrainer(LTN.LightningModule):
         self.log_dict(total_performance, prog_bar=True, sync_dist=True)
     
     def on_test_epoch_start(self):
-        self.test_total_accuracy = BinaryAccuracy()
-        self.test_total_f1 = BinaryF1Score()
-        self.test_total_precision = BinaryPrecision()
-        self.test_total_recall = BinaryRecall()
-        self.test_total_pr_curve = BinaryPrecisionRecallCurve()
+        self.test_total_accuracy = BinaryAccuracy().to(self.device)
+        self.test_total_f1 = BinaryF1Score().to(self.device)
+        self.test_total_precision = BinaryPrecision().to(self.device)
+        self.test_total_recall = BinaryRecall().to(self.device)
+        self.test_total_pr_curve = BinaryPrecisionRecallCurve().to(self.device)
         self.test_per_semantic_accuracy = {}
         self.test_per_semantic_f1 = {}
         self.test_per_semantic_precision = {}
@@ -643,11 +643,11 @@ class DFDDFMTrainer(LTN.LightningModule):
             logger.info(f"Semantic class {semidx} - y_hat_1 size: {y_hat.size()}; y_1 size: {y.size()}")
             
             if semidx not in self.test_per_semantic_accuracy:
-                self.test_per_semantic_accuracy[semidx] = BinaryAccuracy()
-                self.test_per_semantic_f1[semidx] = BinaryF1Score()
-                self.test_per_semantic_precision[semidx] = BinaryPrecision()
-                self.test_per_semantic_recall[semidx] = BinaryRecall()
-                self.test_per_semantic_pr_curve[semidx] = BinaryPrecisionRecallCurve()
+                self.test_per_semantic_accuracy[semidx] = BinaryAccuracy().to(self.device)
+                self.test_per_semantic_f1[semidx] = BinaryF1Score().to(self.device)
+                self.test_per_semantic_precision[semidx] = BinaryPrecision().to(self.device)
+                self.test_per_semantic_recall[semidx] = BinaryRecall().to(self.device)
+                self.test_per_semantic_pr_curve[semidx] = BinaryPrecisionRecallCurve().to(self.device)
             self.test_per_semantic_accuracy[semidx].update(F.sigmoid(y_hat), y.long())
             self.test_per_semantic_f1[semidx].update(F.sigmoid(y_hat), y.long())
             self.test_per_semantic_precision[semidx].update(F.sigmoid(y_hat), y.long())
@@ -660,11 +660,11 @@ class DFDDFMTrainer(LTN.LightningModule):
             logger.info(f"Semantic class {semidx} - y_hat_2 size: {y_hat.size()}; y_2 size: {y.size()}")
             
             if semidx not in self.test_per_semantic_accuracy:
-                self.test_per_semantic_accuracy[semidx] = BinaryAccuracy()
-                self.test_per_semantic_f1[semidx] = BinaryF1Score()
-                self.test_per_semantic_precision[semidx] = BinaryPrecision()
-                self.test_per_semantic_recall[semidx] = BinaryRecall()
-                self.test_per_semantic_pr_curve[semidx] = BinaryPrecisionRecallCurve()
+                self.test_per_semantic_accuracy[semidx] = BinaryAccuracy().to(self.device)
+                self.test_per_semantic_f1[semidx] = BinaryF1Score().to(self.device)
+                self.test_per_semantic_precision[semidx] = BinaryPrecision().to(self.device)
+                self.test_per_semantic_recall[semidx] = BinaryRecall().to(self.device)
+                self.test_per_semantic_pr_curve[semidx] = BinaryPrecisionRecallCurve().to(self.device)
             self.test_per_semantic_accuracy[semidx].update(F.sigmoid(y_hat), y.long())
             self.test_per_semantic_f1[semidx].update(F.sigmoid(y_hat), y.long())
             self.test_per_semantic_precision[semidx].update(F.sigmoid(y_hat), y.long())
