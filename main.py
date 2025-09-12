@@ -705,7 +705,10 @@ class DFDDFMTrainer(LTN.LightningModule):
         self.log("test_total_Precision_epoch", self.test_total_precision.compute(), prog_bar=True, sync_dist=True)
         self.log("test_total_Recall_epoch", self.test_total_recall.compute(), prog_bar=True, sync_dist=True)
         precision, recall, _ = self.test_total_pr_curve.compute()
-        ap = torch.trapz(precision, recall)
+        sorted_indices = torch.argsort(recall)
+        recall_sorted = recall[sorted_indices]
+        precision_sorted = precision[sorted_indices]
+        ap = torch.trapz(precision_sorted, recall_sorted)
         self.log("test_total_AP_epoch", ap, prog_bar=True, sync_dist=True)
         
         aps = []
@@ -723,7 +726,10 @@ class DFDDFMTrainer(LTN.LightningModule):
                      self.test_per_semantic_recall[semidx].compute(),
                      prog_bar=False, sync_dist=True)
             precision, recall, _ = self.test_per_semantic_pr_curve[semidx].compute()
-            ap = torch.trapz(precision, recall)
+            sorted_indices = torch.argsort(recall)
+            recall_sorted = recall[sorted_indices]
+            precision_sorted = precision[sorted_indices]
+            ap = torch.trapz(precision_sorted, recall_sorted)
             aps.append(ap)
         mAP = torch.stack(aps).mean()
         self.log("test_total_mAP_epoch", mAP, prog_bar=True, sync_dist=True)
