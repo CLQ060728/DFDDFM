@@ -255,7 +255,7 @@ class DFDDFMTrainer(LTN.LightningModule):
         total_loss = {}
         if self.model_mode == "SVDDFM":
 
-            self.__check_network_grad__()
+            # self.__check_network_grad__()
 
             if self.current_epoch < self.optim_configs.dfm_start_epoch:
                 logger.debug(f"Switching model mode from SVDDFM to SVD")
@@ -476,7 +476,7 @@ class DFDDFMTrainer(LTN.LightningModule):
 
             self.log_dict(total_loss, prog_bar=True, sync_dist=True)
         elif self.model_mode == "SVD":
-            self.__check_network_grad__()
+            # self.__check_network_grad__()
 
             logger.debug(f"total_loss before __svd_linear_training_step__: {total_loss}")
 
@@ -485,7 +485,7 @@ class DFDDFMTrainer(LTN.LightningModule):
             logger.debug(f"total_loss after __svd_linear_training_step__: {total_loss}")
             self.log_dict(total_loss, prog_bar=True, sync_dist=True)
         elif self.model_mode == "FEAT_LINEAR":
-            self.__check_network_grad__()
+            # self.__check_network_grad__()
 
             logger.debug(f"{self.model_mode}, total_loss before __svd_linear_training_step__: {total_loss}")
 
@@ -505,7 +505,7 @@ class DFDDFMTrainer(LTN.LightningModule):
         total_loss = {}
         total_performance = {}
         if self.model_mode == "SVDDFM" or self.model_mode == "SVD_DFM":
-            self.__check_network_grad__()
+            # self.__check_network_grad__()
 
             y_hat_1, encoder_features_1, decoder_features_1, manifolds_features_1,\
                 y_hat_2, encoder_features_2, decoder_features_2, manifolds_features_2,\
@@ -595,11 +595,11 @@ class DFDDFMTrainer(LTN.LightningModule):
                             recon_reg_loss_value = recon_reg_loss_dict["recon_reg_loss"]
                             total_loss.update({"recon_reg_loss": recon_reg_loss_value})
         elif self.model_mode == "SVD":
-            self.__check_network_grad__()
+            # self.__check_network_grad__()
 
             self.__svd_linear_validation_step__(batch, total_performance, total_loss, step_mode)
         elif self.model_mode == "FEAT_LINEAR":
-            self.__check_network_grad__()
+            # self.__check_network_grad__()
 
             self.__svd_linear_validation_step__(batch, total_performance, total_loss, step_mode)
 
