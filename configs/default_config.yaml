@@ -2,7 +2,7 @@
 seed_everything: 88
 trainer:
   accelerator: auto
-  strategy: 'ddp_spawn'   # 'ddp', 'ddp_spawn', 'deepspeed_stage_2', 'deepspeed_stage_3', 'fsdp', 'fsdp_sharded', 'fsdp_sharded_wrap', 'ddp2', 'dp'
+  strategy: 'ddp_spawn'   # 'ddp', 'ddp_spawn', 'ddp_spawn_find_unused_parameters_true (SVDDFM)', 'deepspeed_stage_2', 'deepspeed_stage_3', 'fsdp', 'fsdp_sharded', 'fsdp_sharded_wrap', 'ddp2', 'dp'
   devices: auto
   num_nodes: 1
   precision: null
@@ -83,11 +83,11 @@ trainer:
   default_root_dir: './output/'
   model_registry: null
 model:
-  model_mode: SVD                              # ['SVDDFM', 'SVD_DFM', 'SVD', 'FEAT_LINEAR', 'FEAT'], the model type to use
+  model_mode: SVDDFM                              # ['SVDDFM', 'SVD_DFM', 'SVD', 'FEAT_LINEAR', 'FEAT'], the model type to use
   svd_dfm:
     svd_dfm_with_dfd: true                         # whether to use DFD loss when model_mode is 'SVD_DFM'
     svd_chkpt_path: null                           # the path to the pretrained SVD model checkpoint, if None, train from scratch
-  model_type: DINO_V2                             # ['CLIP', 'DINO_V2', 'DINO_V3'], the pretrained model type to use
+  model_type: DINO_V3                             # ['CLIP', 'DINO_V2', 'DINO_V3'], the pretrained model type to use
   feat_extractor_type: null                       # ['CLIP', 'DINO_V2', 'DINO_V3'], the pretrained model type to use when model_mode is 'FEAT' or 'FEAT_LINEAR'
   model_configs: 
     ClipSVDDFM:                                    # CLIP model for both SVD and SVDDFM
@@ -139,18 +139,19 @@ model:
     # scheduler_T_max: 100                           # T_max for CosineAnnealingLR scheduler
     do_reconstruction: true                        # whether to use latent space encoder-decoder feature reconstruction loss
     use_recon_reg_loss: true                       # whether to use regularization loss function during training to avoid disentangled manifolds crashing
-    dfm_start_epoch: 61                            # starting epoches to train the disentangled fake manifolds
-    dissparcons_start_epoch: 66                    # starting epoches to use distance,  sparcity and consistency losses and also the regularization loss when it's enabled
+    dfm_start_epoch: 41                            # starting epoches to train the disentangled fake manifolds
+    dissparcons_start_epoch: 46                    # starting epoches to use distance,  sparcity and consistency losses and also the regularization loss when it's enabled
   inference_configs: {}
 data:
-  model_type: 'DINO_V2'                                  # ["CLIP", "DINO_V2", "DINO_V3_LVD", "DINO_V3_SAT"] for image transformations, different models have different types
+  model_type: 'DINO_V3_LVD'                                  # ["CLIP", "DINO_V2", "DINO_V3_LVD", "DINO_V3_SAT"] for image transformations, different models have different types
   train_dataset_path: '/root/WORKSPACE/DFDDFM/data/train/'   # ['data/train']
   val_dataset_path: '/root/WORKSPACE/DFDDFM/data/val/'       # ['data/val']
   test_dataset_path: '/root/WORKSPACE/DFDDFM/data/test/'     # ['data/test']
   manifolds_paths:                                           # List[str] the paths to the manifolds images paths
     - 'Real'
-    - 'mix'
+    - 'Midjourney'
   manifolds_indices_path: 'data/manifolds_indices_2.json' # str The path to the mapping of the corresponding manifolds' indices.
+  sem_idxes_path: 'data/semantic_indices.json'            # str The path to the semantic indices. Required if test_dataset_path is provided.
   batch_size: 160                                   # batch size for training
   num_workers: 8                                   # number of workers for data loading
 

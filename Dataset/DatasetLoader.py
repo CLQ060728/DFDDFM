@@ -19,12 +19,16 @@ class DFDDFMDataset(Dataset):
                  model_type: Literal["CLIP", "DINO_V2", "DINO_V3_LVD", "DINO_V3_SAT"],
                  img_root_path: str,
                  manifolds_paths: Tuple[str, str],
+                 task_mode: Literal["ntest", "test"] = "ntest",
+                 sem_idxes_path: str = None,
                  manifolds_indices_correspondence: Dict[str, str] = None):
         """
             params:
                 model_type: Literal["CLIP", "DINO_V2", "DINO_V3_LVD", "DINO_V3_SAT"] The type of the model to be used. Options are "CLIP", "DINO_V2", "DINO_V3_LVD", "DINO_V3_SAT".
                 img_root_path: str The root path to the images.
                 manifolds_paths: Tuple[str, str] The paths to the manifolds.
+                task_mode: Literal["ntest", "test"] The mode of the task. Options are "ntest" for non-test mode and "test" for test mode.
+                sem_idxes_path: str The path to the semantic indices mapping file. Required if task_mode is "test".
                 manifolds_indices_correspondence: Dict[str, str] The correspondence between the indices of the manifolds.
         """
         assert os.path.exists(img_root_path), f"Image root path {img_root_path} does not exist."
@@ -37,6 +41,11 @@ class DFDDFMDataset(Dataset):
         assert manifolds_paths[0] != manifolds_paths[1], f"manifolds_paths should be different."
         # assert len(manifolds_labels) == 2, f"manifolds_labels should contain exactly two labels, but got {len(manifolds_labels)}."
         assert model_type in ["CLIP", "DINO_V2", "DINO_V3_LVD", "DINO_V3_SAT"], f"model_type should be one of ['CLIP', 'DINO_V2', 'DINO_V3_LVD', 'DINO_V3_SAT'], but got {model_type}."
+        assert task_mode in ["ntest", "test"], f"task_mode should be one of ['ntest', 'test'], but got {task_mode}."
+        if task_mode == "test":
+            assert sem_idxes_path is not None and sem_idxes_path != "", f"sem_idxes_path should not be None or '' when task_mode is 'test', but got {sem_idxes_path}."
+        else:
+            assert sem_idxes_path is None or sem_idxes_path == "", f"sem_idxes_path should be None or '' when task_mode is 'ntest', but got {sem_idxes_path}."
         assert isinstance(manifolds_indices_correspondence, dict), \
             f"manifolds_indices_correspondence should be a dict, but got {type(manifolds_indices_correspondence)}."
 
@@ -155,6 +164,12 @@ class DFDDFMDataset(Dataset):
 
         self.imgs_root_path = img_root_path
         self.model_type = model_type
+        self.task_mode = task_mode
+        if self.task_mode == "test":
+            with open(sem_idxes_path, "r") as sem_idxes_file:
+                self.semantic_indices = json.load(sem_idxes_file)
+
+            logger.debug(f"Semantic indices: {self.semantic_indices}")
 
     def __len__(self):
         return self.data.shape[0]
@@ -170,6 +185,9 @@ class DFDDFMDataset(Dataset):
                "Image path must end with .jpg, .jpeg, .JPEG or .png"
 
         label_1, label_2 = self.labels[idx]
+        if self.task_mode == "test":
+            semantic_label_1 = torch.tensor(int(self.semantic_indices[img_path_1.split("/")[-1].split("_")[0]])).long()
+            semantic_label_2 = torch.tensor(int(self.semantic_indices[img_path_2.split("/")[-1].split("_")[0]])).long()
         img_1 = Image.open(os.path.join(self.imgs_root_path, img_path_1)).convert("RGB")
         img_2 = Image.open(os.path.join(self.imgs_root_path, img_path_2)).convert("RGB")
         if self.model_type == "CLIP":
@@ -185,9 +203,13 @@ class DFDDFMDataset(Dataset):
         
         label_tensor_1 = torch.tensor(label_1, requires_grad=False).float()
         label_tensor_2 = torch.tensor(label_2, requires_grad=False).float()
-
-        return (img_tensor_1, img_tensor_2), torch.tensor(self.manifold2_indices[idx]).long(),\
-               (label_tensor_1, label_tensor_2)
+        
+        if self.task_mode == "test":
+            return (img_tensor_1, img_tensor_2), torch.tensor(self.manifold2_indices[idx]).long(),\
+                   (label_tensor_1, label_tensor_2), (semantic_label_1, semantic_label_2)
+        else:
+            return (img_tensor_1, img_tensor_2), torch.tensor(self.manifold2_indices[idx]).long(),\
+                   (label_tensor_1, label_tensor_2)
 
     def transform_img_clip(self, resize_size: int = 256):
         resize = transforms.Resize((resize_size, resize_size), antialias=True,
@@ -242,6 +264,7 @@ class DFDDFMTrainDataModule(LTN.LightningDataModule):
                  test_dataset_path: str,
                  manifolds_paths: Tuple[str, str],
                  manifolds_indices_path: str = None,
+                 sem_idxes_path: str = None,
                  batch_size: int = 120,
                  num_workers: int = 2):
         """
@@ -253,6 +276,7 @@ class DFDDFMTrainDataModule(LTN.LightningDataModule):
             test_dataset_path: str The path to the test dataset.
             manifolds_paths: Tuple[str, str] The paths to the manifolds images paths.
             manifolds_indices_path: str The path to the mapping of the corresponding manifolds' indices.
+            sem_idxes_path: str The path to the semantic indices. Required if test_dataset_path is provided.
             batch_size: int The batch size for the dataloaders.
             num_workers: int The number of workers for the dataloaders.
         """
@@ -276,6 +300,7 @@ class DFDDFMTrainDataModule(LTN.LightningDataModule):
             self.manifolds_indices_correspondence = json.load(mani_idxes_file)
         self.batch_size = batch_size
         self.num_workers = num_workers
+        self.sem_idxes_path = sem_idxes_path
 
     def setup(self, stage=None):
         if stage == "fit":
@@ -284,11 +309,15 @@ class DFDDFMTrainDataModule(LTN.LightningDataModule):
             self.train_dataset = DFDDFMDataset(self.model_type,
                                                self.train_dataset_path,
                                                self.manifolds_paths,
+                                               "ntest",
+                                               self.sem_idxes_path,
                                                self.manifolds_indices_correspondence)
             if self.val_dataset_path is not None:
                 self.val_dataset = DFDDFMDataset(self.model_type,
                                                  self.val_dataset_path,
                                                  self.manifolds_paths,
+                                                 "ntest",
+                                                 self.sem_idxes_path,
                                                  self.manifolds_indices_correspondence)
         # if stage == "validate":
         #     self.val_dataset = DFDDFMDataset(self.model_type, self.val_dataset_path, self.manifolds_paths)
@@ -298,6 +327,8 @@ class DFDDFMTrainDataModule(LTN.LightningDataModule):
             self.test_dataset = DFDDFMDataset(self.model_type,
                                               self.test_dataset_path,
                                               self.manifolds_paths,
+                                              "test",
+                                              self.sem_idxes_path,
                                               self.manifolds_indices_correspondence)
 
     def train_dataloader(self):

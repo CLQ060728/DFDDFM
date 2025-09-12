@@ -9,6 +9,9 @@ import torch.nn.functional as F
 import lightning as LTN
 from torchmetrics.functional.classification import binary_accuracy, binary_f1_score
 from torchmetrics.functional.classification import binary_precision, binary_recall
+from torchmetrics.classification import BinaryAccuracy, BinaryF1Score
+from torchmetrics.classification import BinaryPrecision, BinaryRecall
+from torchmetrics.classification import BinaryPrecisionRecallCurve
 from lightning.pytorch.cli import LightningCLI
 from Model.DFDDFM import ClipSVDDFM, Dinov2SVDDFM, Dinov3SVDDFM
 from Model.FeatureExtractors import ClipFeatureExtractor, Dinov2FeatureExtractor, Dinov3FeatureExtractor
@@ -374,8 +377,6 @@ class DFDDFMTrainer(LTN.LightningModule):
                         recon_reg_loss_dict = self.recon_reg_loss(manifolds_features_1, manifolds_features_2)
                         recon_reg_loss_value = recon_reg_loss_dict["recon_reg_loss"]
                         total_loss.update({"recon_reg_loss": recon_reg_loss_value})
-
-                self.log_dict(total_loss, prog_bar=True, sync_dist=True)
         elif self.model_mode == "SVD_DFM":
             logger.debug(f"Epoch {self.current_epoch}: Training with SVD_DFM model")
 
@@ -473,8 +474,6 @@ class DFDDFMTrainer(LTN.LightningModule):
                     recon_reg_loss_dict = self.recon_reg_loss(manifolds_features_1, manifolds_features_2)
                     recon_reg_loss_value = recon_reg_loss_dict["recon_reg_loss"]
                     total_loss.update({"recon_reg_loss": recon_reg_loss_value})
-
-            self.log_dict(total_loss, prog_bar=True, sync_dist=True)
         elif self.model_mode == "SVD":
             # self.__check_network_grad__()
 
@@ -483,7 +482,6 @@ class DFDDFMTrainer(LTN.LightningModule):
             self.__svd_linear_training_step__(batch, total_loss)
 
             logger.debug(f"total_loss after __svd_linear_training_step__: {total_loss}")
-            self.log_dict(total_loss, prog_bar=True, sync_dist=True)
         elif self.model_mode == "FEAT_LINEAR":
             # self.__check_network_grad__()
 
@@ -492,8 +490,8 @@ class DFDDFMTrainer(LTN.LightningModule):
             self.__svd_linear_training_step__(batch, total_loss)
 
             logger.debug(f"total_loss after __svd_linear_training_step__: {total_loss}")
-            self.log_dict(total_loss, prog_bar=True, sync_dist=True)
-
+            
+        self.log_dict(total_loss, prog_bar=True, sync_dist=True)
         total_loss_value = sum(total_loss.values()) if len(total_loss) > 0 else None
 
         logger.debug(f"total_loss_value: {total_loss_value}")
@@ -503,17 +501,8 @@ class DFDDFMTrainer(LTN.LightningModule):
     # def __val_test_common_step__(self, batch: torch.Tensor,
     #                              step_mode: Literal["val", "test"] = "val"):
 
-    def __svd_linear_validation_step__(self, batch,
-                                       total_performance, total_loss):
-        x_pair, _, y_pair = batch  # x2_manifold_indices
-        x_1, x_2 = x_pair
-        y_1, y_2 = y_pair
-        batch_1 = (x_1, y_1)
-        batch_2 = (x_2, y_2)
-        y_hat_1, y_1 = self(batch_1)
-        y_hat_2, y_2 = self(batch_2)
-
-        # compute accuracy f1, precision
+    def __compute_val_metrics_common__(self, y_hat_1, y_1, y_hat_2, y_2, total_performance):
+        # compute accuracy f1, precision, recall
         accuracy_1 = binary_accuracy(F.sigmoid(y_hat_1), y_1.long())
         accuracy_2 = binary_accuracy(F.sigmoid(y_hat_2), y_2.long())
         f1_1 = binary_f1_score(F.sigmoid(y_hat_1), y_1.long())
@@ -529,126 +518,215 @@ class DFDDFMTrainer(LTN.LightningModule):
         total_performance.update({"accuracy": accuracy, "f1": f1,
                                   "precision": precision, "recall": recall})
 
-        # COMPUTE ALL LOSSES
-        # compute dfd loss
-        dfd_loss_dict_1 = self.dfd_loss(y_hat_1, y_1)
-        dfd_loss_dict_2 = self.dfd_loss(y_hat_2, y_2)
-        dfd_loss_value_1 = dfd_loss_dict_1["dfd_loss"]
-        dfd_loss_value_2 = dfd_loss_dict_2["dfd_loss"]
-        total_loss.update({"dfd_loss": (dfd_loss_value_1 + dfd_loss_value_2) / 2})
-        # compute svd loss
-        if self.model_mode != "FEAT_LINEAR" and self.model_mode != "FEAT":
-            svd_losses_dict = self.svd_loss(self.model)
-            svd_losses_value = svd_losses_dict["svd_losses_orth_keepsv"]
-            total_loss.update({"svd_losses": svd_losses_value})
+    def __svd_linear_validation_step__(self, batch, total_performance):
+        x_pair, _, y_pair = batch  # x2_manifold_indices
+        x_1, x_2 = x_pair
+        y_1, y_2 = y_pair
+        batch_1 = (x_1, y_1)
+        batch_2 = (x_2, y_2)
+        y_hat_1, y_1 = self(batch_1)
+        y_hat_2, y_2 = self(batch_2)
+
+        self.__compute_val_metrics_common__(y_hat_1, y_1, y_hat_2, y_2, total_performance)
 
     def validation_step(self, batch: torch.Tensor):
-        total_loss = {}
         total_performance = {}
-        if self.model_mode == "SVDDFM" or self.model_mode == "SVD_DFM":
+        if self.model_mode == "SVDDFM":
             # self.__check_network_grad__()
+            if self.current_epoch < self.optim_configs.dfm_start_epoch:
+                logger.debug(f"Switching model mode from SVDDFM to SVD")
 
-            y_hat_1, encoder_features_1, decoder_features_1, manifolds_features_1,\
-                y_hat_2, encoder_features_2, decoder_features_2, manifolds_features_2,\
-                x2_manifold_indices, y_pair = self(batch)
+                self.model_mode = "SVD"
+                self.model.dfm = False
+                self.__svd_linear_validation_step__(batch, total_performance)
+                self.model_mode = "SVDDFM"
+                self.model.dfm = True
+            else:
+                y_hat_1, _, _, _, y_hat_2, _, _, _, _, y_pair = self(batch)
+                y_1, y_2 = y_pair
+
+                self.__compute_val_metrics_common__(y_hat_1, y_1, y_hat_2, y_2, total_performance)
+        elif self.model_mode == "SVD_DFM":
+            y_hat_1, _, _, _, y_hat_2, _, _, _, _, y_pair = self(batch)
             y_1, y_2 = y_pair
 
-            # compute accuracy, f1, precision
-            accuracy_1 = binary_accuracy(F.sigmoid(y_hat_1), y_1.long())
-            accuracy_2 = binary_accuracy(F.sigmoid(y_hat_2), y_2.long())
-            f1_1 = binary_f1_score(F.sigmoid(y_hat_1), y_1.long())
-            f1_2 = binary_f1_score(F.sigmoid(y_hat_2), y_2.long())
-            precision_1 = binary_precision(F.sigmoid(y_hat_1), y_1.long())
-            precision_2 = binary_precision(F.sigmoid(y_hat_2), y_2.long())
-            recall_1 = binary_recall(F.sigmoid(y_hat_1), y_1.long())
-            recall_2 = binary_recall(F.sigmoid(y_hat_2), y_2.long())
-            accuracy = (accuracy_1 + accuracy_2) / 2
-            f1 = (f1_1 + f1_2) / 2
-            precision = (precision_1 + precision_2) / 2
-            recall = (recall_1 + recall_2) / 2
-            total_performance.update({"accuracy": accuracy, "f1": f1,
-                                      "precision": precision, "recall": recall})
-
-            # COMPUTE ALL LOSSES
-            if self.svd_dfm_with_dfd or (self.model_mode == "SVDDFM"):
-                # compute dfd and svd losses
-                dfd_loss_dict_1 = self.dfd_loss(y_hat_1, y_1)
-                dfd_loss_dict_2 = self.dfd_loss(y_hat_2, y_2)
-                dfd_loss_value_1 = dfd_loss_dict_1["dfd_loss"]
-                dfd_loss_value_2 = dfd_loss_dict_2["dfd_loss"]
-                total_loss.update({"dfd_loss": (dfd_loss_value_1 + dfd_loss_value_2) / 2})
-            if self.model_mode == "SVDDFM":
-                # compute svd losses
-                svd_losses_dict = self.svd_loss(self.model)
-                svd_losses_value = svd_losses_dict["svd_losses_orth_keepsv"]
-                total_loss.update({"svd_losses": svd_losses_value})
-
-            # compute dfm reconstruction and regularization losses
-            if self.current_epoch >= self.optim_configs.dfm_start_epoch:
-                if self.do_reconstruction:
-                    recon_loss_dict_1 = self.recon_loss(decoder_features_1, encoder_features_1)
-                    recon_loss_dict_2 = self.recon_loss(decoder_features_2, encoder_features_2)
-                    recon_loss_value_1 = recon_loss_dict_1[f"reconstruction_loss_{self.recon_loss.loss_type}"]
-                    recon_loss_value_2 = recon_loss_dict_2[f"reconstruction_loss_{self.recon_loss.loss_type}"]
-                    total_loss.update({"recon_loss": (recon_loss_value_1 + recon_loss_value_2)})
-                    if self.use_recon_reg_loss:
-                        recon_reg_loss_dict = self.recon_reg_loss(manifolds_features_1, manifolds_features_2)
-                        recon_reg_loss_value = recon_reg_loss_dict["recon_reg_loss"]
-                        total_loss.update({"recon_reg_loss": recon_reg_loss_value})
-                
-                # compute other dfm losses after 'dissparcons_start_epoch's, i.e., distance, sparsity, consistency
-                if self.current_epoch >= self.optim_configs.dissparcons_start_epoch:
-                    distance_loss_dict = self.distance_loss(manifolds_features_1, manifolds_features_2,
-                                                            x2_manifold_indices)
-                    distance_loss_value = distance_loss_dict["distance_loss"]
-                    total_loss.update({"distance_loss": distance_loss_value})
-
-                    sparsity_loss_dict = self.sparsity_loss(manifolds_features_1, manifolds_features_2)
-                    sparsity_loss_value = sparsity_loss_dict["sparsity_loss"]
-                    total_loss.update({"sparsity_loss": sparsity_loss_value})
-
-                    # prepare S_hat for all the manifolds, consistency loss
-                    S_hat = torch.tensor([]).to(manifolds_features_1)
-                    for manifold_idx in range(manifolds_features_1.size(0)):
-                        remaining_indices = torch.tensor([idx for idx in range(manifolds_features_1.size(0))\
-                                                        if idx != manifold_idx]).to(manifolds_features_1.device)
-                        if self.model.dfm_aggr == "SUM":
-                            aggr_12 = torch.cat((manifolds_features_1[[manifold_idx], :, :],
-                                                    manifolds_features_2[remaining_indices, :, :]),
-                                                    dim=0).sum(dim=0)
-                        else: # self.model.dfm_aggr == "CONCAT"
-                            aggr_12 = []
-                            aggr_12.append(manifolds_features_1[manifold_idx, :, :])
-                            for remaining_idx in remaining_indices:
-                                aggr_12.append(manifolds_features_2[remaining_idx, :, :])
-                            aggr_12 = torch.hstack(aggr_12)
-                        X_s_hat = self.model.dfm_decoder(aggr_12)
-                        f_12 = self.model.dfm_encoder(X_s_hat)
-                        S_manifold_idx = self.model.orthogonal_manifolds[manifold_idx](f_12)
-                        S_hat = torch.cat((S_hat, S_manifold_idx.unsqueeze(0)), dim=0)
-                    consistency_loss_dict = self.consistency_loss(S_hat, manifolds_features_1)
-                    consistency_loss_value = consistency_loss_dict["consistency_loss"]
-                    total_loss.update({"consistency_loss": consistency_loss_value})
-
-                    if self.use_recon_reg_loss:
-                        recon_reg_loss_dict = self.recon_reg_loss(manifolds_features_1, manifolds_features_2)
-                        recon_reg_loss_value = recon_reg_loss_dict["recon_reg_loss"]
-                        total_loss.update({"recon_reg_loss": recon_reg_loss_value})
+            self.__compute_val_metrics_common__(y_hat_1, y_1, y_hat_2, y_2, total_performance)
         elif self.model_mode == "SVD":
             # self.__check_network_grad__()
 
-            self.__svd_linear_validation_step__(batch, total_performance, total_loss)
+            self.__svd_linear_validation_step__(batch, total_performance)
         elif self.model_mode == "FEAT_LINEAR":
             # self.__check_network_grad__()
 
-            self.__svd_linear_validation_step__(batch, total_performance, total_loss)
+            self.__svd_linear_validation_step__(batch, total_performance)
 
-        val_test_results = total_performance | total_loss
+        self.log_dict(total_performance, prog_bar=True, sync_dist=True)
+    
+    def on_test_epoch_start(self):
+        self.test_total_accuracy = BinaryAccuracy()
+        self.test_total_f1 = BinaryF1Score()
+        self.test_total_precision = BinaryPrecision()
+        self.test_total_recall = BinaryRecall()
+        self.test_total_pr_curve = BinaryPrecisionRecallCurve()
+        self.test_per_semantic_accuracy = {}
+        self.test_per_semantic_f1 = {}
+        self.test_per_semantic_precision = {}
+        self.test_per_semantic_recall = {}
+        self.test_per_semantic_pr_curve = {}
 
-        self.log_dict(val_test_results, prog_bar=True, sync_dist=True)
+    def __compute_test_metrics_common__(self, y_hat_1, y_1, y_hat_2, y_2, semantic_indices,
+                                        total_performance):
+        semantic_indices_1, semantic_indices_2 = semantic_indices
+        semidx_y_hat_dict_1 = {}
+        semidx_y_dict_1 = {}
+        semidx_y_hat_dict_2 = {}
+        semidx_y_dict_2 = {}
+        for idx, semidx in enumerate(semantic_indices_1):
+            if semidx.item() not in semidx_y_hat_dict_1:
+                semidx_y_hat_dict_1[semidx.item()] = torch.tensor(y_hat_1[[idx], :])
+                semidx_y_dict_1[semidx.item()] = torch.tensor(y_1[[idx], :])
+            else:
+                semidx_y_hat_dict_1[semidx.item()] = torch.cat([semidx_y_hat_dict_1[semidx.item()], 
+                                                                torch.tensor(y_hat_1[[idx], :])],
+                                                                dim=0)
+                semidx_y_dict_1[semidx.item()] = torch.cat([semidx_y_dict_1[semidx.item()], 
+                                                                torch.tensor(y_1[[idx], :])],
+                                                                dim=0)
+            
+            logger.info(f"semidx_y_hat_dict_1[{semidx.item()}] size: {semidx_y_hat_dict_1[semidx.item()].size()}")
+            logger.info(f"semidx_y_dict_1[{semidx.item()}] size: {semidx_y_dict_1[semidx.item()].size()}")
+        
+        for idx, semidx in enumerate(semantic_indices_2):
+            if semidx.item() not in semidx_y_hat_dict_2:
+                semidx_y_hat_dict_2[semidx.item()] = torch.tensor(y_hat_2[[idx], :])
+                semidx_y_dict_2[semidx.item()] = torch.tensor(y_2[[idx], :])
+            else:
+                semidx_y_hat_dict_2[semidx.item()] = torch.cat([semidx_y_hat_dict_2[semidx.item()], 
+                                                                torch.tensor(y_hat_2[[idx], :])],
+                                                                dim=0)
+                semidx_y_dict_2[semidx.item()] = torch.cat([semidx_y_dict_2[semidx.item()], 
+                                                                torch.tensor(y_2[[idx], :])],
+                                                                dim=0)
+            
+            logger.info(f"semidx_y_hat_dict_2[{semidx.item()}] size: {semidx_y_hat_dict_2[semidx.item()].size()}")
+            logger.info(f"semidx_y_dict_2[{semidx.item()}] size: {semidx_y_dict_2[semidx.item()].size()}")
 
+        # compute accuracy f1, precision, recall
+        accuracy_1 = binary_accuracy(F.sigmoid(y_hat_1), y_1.long())
+        accuracy_2 = binary_accuracy(F.sigmoid(y_hat_2), y_2.long())
+        f1_1 = binary_f1_score(F.sigmoid(y_hat_1), y_1.long())
+        f1_2 = binary_f1_score(F.sigmoid(y_hat_2), y_2.long())
+        precision_1 = binary_precision(F.sigmoid(y_hat_1), y_1.long())
+        precision_2 = binary_precision(F.sigmoid(y_hat_2), y_2.long())
+        recall_1 = binary_recall(F.sigmoid(y_hat_1), y_1.long())
+        recall_2 = binary_recall(F.sigmoid(y_hat_2), y_2.long())
+        accuracy = (accuracy_1 + accuracy_2) / 2
+        f1 = (f1_1 + f1_2) / 2
+        precision = (precision_1 + precision_2) / 2
+        recall = (recall_1 + recall_2) / 2
+        total_performance.update({"accuracy": accuracy, "f1": f1,
+                                  "precision": precision, "recall": recall})
+        self.test_total_accuracy.update(F.sigmoid(y_hat_1), y_1.long())
+        self.test_total_accuracy.update(F.sigmoid(y_hat_2), y_2.long())
+        self.test_total_f1.update(F.sigmoid(y_hat_1), y_1.long())
+        self.test_total_f1.update(F.sigmoid(y_hat_2), y_2.long())
+        self.test_total_precision.update(F.sigmoid(y_hat_1), y_1.long())
+        self.test_total_precision.update(F.sigmoid(y_hat_2), y_2.long())
+        self.test_total_recall.update(F.sigmoid(y_hat_1), y_1.long())
+        self.test_total_recall.update(F.sigmoid(y_hat_2), y_2.long())
+        self.test_total_pr_curve.update(F.sigmoid(y_hat_1), y_1.long())
+        self.test_total_pr_curve.update(F.sigmoid(y_hat_2), y_2.long())
+
+        for semidx, y_hat in semidx_y_hat_dict_1.items():
+            y = semidx_y_dict_1[semidx]
+            
+            logger.info(f"Semantic class {semidx} - y_hat_1 size: {y_hat.size()}; y_1 size: {y.size()}")
+            
+            if semidx not in self.test_per_semantic_accuracy:
+                self.test_per_semantic_accuracy[semidx] = BinaryAccuracy()
+                self.test_per_semantic_f1[semidx] = BinaryF1Score()
+                self.test_per_semantic_precision[semidx] = BinaryPrecision()
+                self.test_per_semantic_recall[semidx] = BinaryRecall()
+                self.test_per_semantic_pr_curve[semidx] = BinaryPrecisionRecallCurve()
+            self.test_per_semantic_accuracy[semidx].update(F.sigmoid(y_hat), y.long())
+            self.test_per_semantic_f1[semidx].update(F.sigmoid(y_hat), y.long())
+            self.test_per_semantic_precision[semidx].update(F.sigmoid(y_hat), y.long())
+            self.test_per_semantic_recall[semidx].update(F.sigmoid(y_hat), y.long())
+            self.test_per_semantic_pr_curve[semidx].update(F.sigmoid(y_hat), y.long())
+        
+        for semidx, y_hat in semidx_y_hat_dict_2.items():
+            y = semidx_y_dict_2[semidx]
+            
+            logger.info(f"Semantic class {semidx} - y_hat_2 size: {y_hat.size()}; y_2 size: {y.size()}")
+            
+            if semidx not in self.test_per_semantic_accuracy:
+                self.test_per_semantic_accuracy[semidx] = BinaryAccuracy()
+                self.test_per_semantic_f1[semidx] = BinaryF1Score()
+                self.test_per_semantic_precision[semidx] = BinaryPrecision()
+                self.test_per_semantic_recall[semidx] = BinaryRecall()
+                self.test_per_semantic_pr_curve[semidx] = BinaryPrecisionRecallCurve()
+            self.test_per_semantic_accuracy[semidx].update(F.sigmoid(y_hat), y.long())
+            self.test_per_semantic_f1[semidx].update(F.sigmoid(y_hat), y.long())
+            self.test_per_semantic_precision[semidx].update(F.sigmoid(y_hat), y.long())
+            self.test_per_semantic_recall[semidx].update(F.sigmoid(y_hat), y.long())
+            self.test_per_semantic_pr_curve[semidx].update(F.sigmoid(y_hat), y.long())
+
+    def __svd_linear_test_step__(self, batch, total_performance):
+        x_pair, _, y_pair, semantic_indices = batch  # x2_manifold_indices
+        x_1, x_2 = x_pair
+        y_1, y_2 = y_pair
+        batch_1 = (x_1, y_1)
+        batch_2 = (x_2, y_2)
+        y_hat_1, y_1 = self(batch_1)
+        y_hat_2, y_2 = self(batch_2)
+
+        self.__compute_test_metrics_common__(y_hat_1, y_1, y_hat_2, y_2, semantic_indices,
+                                             total_performance)
+        
     def test_step(self, batch: torch.Tensor):
-        self.__val_test_common_step__(batch, step_mode="test")
+        total_performance = {}
+        if self.model_mode == "SVDDFM" or self.model_mode == "SVD_DFM":
+            forward_batch, semantic_indices = batch
+            y_hat_1, _, _, _, y_hat_2, _, _, _, _, y_pair = self(forward_batch)
+            y_1, y_2 = y_pair
+
+            self.__compute_test_metrics_common__(y_hat_1, y_1, y_hat_2, y_2, semantic_indices,
+                                                 total_performance)
+        elif self.model_mode == "SVD":
+            self.__svd_linear_test_step__(batch, total_performance)
+        elif self.model_mode == "FEAT_LINEAR":
+            self.__svd_linear_test_step__(batch, total_performance)
+
+        self.log_dict(total_performance, prog_bar=True, sync_dist=True)
+
+    def on_test_epoch_end(self):
+        self.log("test_total_Accuracy_epoch", self.test_total_accuracy.compute(), prog_bar=True, sync_dist=True)
+        self.log("test_total_F1_epoch", self.test_total_f1.compute(), prog_bar=True, sync_dist=True)
+        self.log("test_total_Precision_epoch", self.test_total_precision.compute(), prog_bar=True, sync_dist=True)
+        self.log("test_total_Recall_epoch", self.test_total_recall.compute(), prog_bar=True, sync_dist=True)
+        precision, recall, _ = self.test_total_pr_curve.compute()
+        ap = torch.trapz(precision, recall)
+        self.log("test_total_AP_epoch", ap, prog_bar=True, sync_dist=True)
+        
+        aps = []
+        for semidx in self.test_per_semantic_accuracy.keys():
+            self.log(f"test_semidx_{semidx}_Accuracy_epoch",
+                     self.test_per_semantic_accuracy[semidx].compute(),
+                     prog_bar=False, sync_dist=True)
+            self.log(f"test_semidx_{semidx}_F1_epoch",
+                     self.test_per_semantic_f1[semidx].compute(),
+                     prog_bar=False, sync_dist=True)
+            self.log(f"test_semidx_{semidx}_Precision_epoch",
+                     self.test_per_semantic_precision[semidx].compute(),
+                     prog_bar=False, sync_dist=True)
+            self.log(f"test_semidx_{semidx}_Recall_epoch",
+                     self.test_per_semantic_recall[semidx].compute(),
+                     prog_bar=False, sync_dist=True)
+            precision, recall, _ = self.test_per_semantic_pr_curve[semidx].compute()
+            ap = torch.trapz(precision, recall)
+            aps.append(ap)
+        mAP = torch.stack(aps).mean()
+        self.log("test_total_mAP_epoch", mAP, prog_bar=True, sync_dist=True)
 
     def predict_step(self, batch: List[Image]):
         pass

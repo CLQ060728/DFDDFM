@@ -149,7 +149,7 @@ class Dinov3FeatureExtractor(nn.Module):
         # self.processor = AutoImageProcessor.from_pretrained(chkpt_dir, use_fast=True)
         self.dino_model = AutoModel.from_pretrained(
             chkpt_dir,
-            device_map="auto"
+            device_map=device # "auto"
         )
         self.dino_model.requires_grad_(False)  # Freeze the DINO model
         self.dino_model.to(device)
