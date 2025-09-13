@@ -1,8 +1,7 @@
 # Author: Qian Liu
 # Email: liu.qian.pro@gmail.com
 
-from typing import Literal, List, Dict, Any
-from PIL.Image import Image
+from typing import Literal, Dict, Any
 import torch
 import torch.nn.functional as F
 # from torch.optim.lr_scheduler import CosineAnnealingLR
