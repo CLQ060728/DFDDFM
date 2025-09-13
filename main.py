@@ -593,9 +593,9 @@ class DFDDFMTrainer(LTN.LightningModule):
                                                             y_1[[idx], :].detach().clone().to(y_1)],
                                                             dim=0)
             
-            logger.info(f"semidx_y_hat_dict_1[{semidx.item()}] size: {semidx_y_hat_dict_1[semidx.item()].size()}")
-            logger.info(f"semidx_y_dict_1[{semidx.item()}] size: {semidx_y_dict_1[semidx.item()].size()}")
-        
+            logger.debug(f"semidx_y_hat_dict_1[{semidx.item()}] size: {semidx_y_hat_dict_1[semidx.item()].size()}")
+            logger.debug(f"semidx_y_dict_1[{semidx.item()}] size: {semidx_y_dict_1[semidx.item()].size()}")
+
         for idx, semidx in enumerate(semantic_indices_2):
             if semidx.item() not in semidx_y_hat_dict_2:
                 semidx_y_hat_dict_2[semidx.item()] = y_hat_2[[idx], :].detach().clone().to(y_hat_2)
@@ -607,9 +607,9 @@ class DFDDFMTrainer(LTN.LightningModule):
                 semidx_y_dict_2[semidx.item()] = torch.cat([semidx_y_dict_2[semidx.item()], 
                                                             y_2[[idx], :].detach().clone().to(y_2)],
                                                            dim=0)
-            
-            logger.info(f"semidx_y_hat_dict_2[{semidx.item()}] size: {semidx_y_hat_dict_2[semidx.item()].size()}")
-            logger.info(f"semidx_y_dict_2[{semidx.item()}] size: {semidx_y_dict_2[semidx.item()].size()}")
+
+            logger.debug(f"semidx_y_hat_dict_2[{semidx.item()}] size: {semidx_y_hat_dict_2[semidx.item()].size()}")
+            logger.debug(f"semidx_y_dict_2[{semidx.item()}] size: {semidx_y_dict_2[semidx.item()].size()}")
 
         # compute accuracy f1, precision, recall
         accuracy_1 = binary_accuracy(F.sigmoid(y_hat_1), y_1.long())
@@ -639,9 +639,9 @@ class DFDDFMTrainer(LTN.LightningModule):
 
         for semidx, y_hat in semidx_y_hat_dict_1.items():
             y = semidx_y_dict_1[semidx]
-            
-            logger.info(f"Semantic class {semidx} - y_hat_1 size: {y_hat.size()}; y_1 size: {y.size()}")
-            
+
+            logger.debug(f"Semantic class {semidx} - y_hat_1 size: {y_hat.size()}; y_1 size: {y.size()}")
+
             if semidx not in self.test_per_semantic_accuracy:
                 self.test_per_semantic_accuracy[semidx] = BinaryAccuracy().to(self.device)
                 self.test_per_semantic_f1[semidx] = BinaryF1Score().to(self.device)
@@ -656,9 +656,9 @@ class DFDDFMTrainer(LTN.LightningModule):
         
         for semidx, y_hat in semidx_y_hat_dict_2.items():
             y = semidx_y_dict_2[semidx]
-            
-            logger.info(f"Semantic class {semidx} - y_hat_2 size: {y_hat.size()}; y_2 size: {y.size()}")
-            
+
+            logger.debug(f"Semantic class {semidx} - y_hat_2 size: {y_hat.size()}; y_2 size: {y.size()}")
+
             if semidx not in self.test_per_semantic_accuracy:
                 self.test_per_semantic_accuracy[semidx] = BinaryAccuracy().to(self.device)
                 self.test_per_semantic_f1[semidx] = BinaryF1Score().to(self.device)
@@ -734,8 +734,159 @@ class DFDDFMTrainer(LTN.LightningModule):
         mAP = torch.stack(aps).mean()
         self.log("test_total_mAP_epoch", mAP, prog_bar=True, sync_dist=True)
 
-    def predict_step(self, batch: List[Image]):
-        pass
+    def on_predict_epoch_start(self):
+        self.predict_total_accuracy = BinaryAccuracy().to(self.device)
+        self.predict_total_f1 = BinaryF1Score().to(self.device)
+        self.predict_total_precision = BinaryPrecision().to(self.device)
+        self.predict_total_recall = BinaryRecall().to(self.device)
+        self.predict_total_pr_curve = BinaryPrecisionRecallCurve().to(self.device)
+        self.predict_per_semantic_accuracy = {}
+        self.predict_per_semantic_f1 = {}
+        self.predict_per_semantic_precision = {}
+        self.predict_per_semantic_recall = {}
+        self.predict_per_semantic_pr_curve = {}
+        self.predict_semantic_labels = []
+        if self.model_mode == "SVDDFM" or self.model_mode == "SVD_DFM":
+            if self.inference_configs.save_features:
+                self.predict_feat_model_outputs = []
+                self.predict_decoder_features = []
+                self.predict_manifolds_features_0 = []
+                self.predict_manifolds_features_1 = []
+                self.predict_manifolds_decoder_features_0 = []
+                self.predict_manifolds_decoder_features_1 = []
+        else:
+            if self.inference_configs.save_features:
+                self.predict_feat_model_outputs = []
+
+    def __compute_predict_metrics_common__(self, y_hat, y, semantic_indices):
+        semidx_y_hat_dict = {}
+        semidx_y_dict = {}
+        for idx, semidx in enumerate(semantic_indices):
+            if semidx.item() not in semidx_y_hat_dict:
+                semidx_y_hat_dict[semidx.item()] = y_hat[[idx], :].detach().clone().to(y_hat)
+                semidx_y_dict[semidx.item()] = y[[idx], :].detach().clone().to(y)
+            else:
+                semidx_y_hat_dict[semidx.item()] = torch.cat([semidx_y_hat_dict[semidx.item()], 
+                                                            y_hat[[idx], :].detach().clone().to(y_hat)],
+                                                               dim=0)
+                semidx_y_dict[semidx.item()] = torch.cat([semidx_y_dict[semidx.item()], 
+                                                            y[[idx], :].detach().clone().to(y)],
+                                                            dim=0)
+
+            logger.debug(f"semidx_y_hat_dict[{semidx.item()}] size: {semidx_y_hat_dict[semidx.item()].size()}")
+            logger.debug(f"semidx_y_dict[{semidx.item()}] size: {semidx_y_dict[semidx.item()].size()}")
+
+        # compute accuracy f1, precision, recall
+        self.test_total_accuracy.update(F.sigmoid(y_hat), y.long())
+        self.test_total_f1.update(F.sigmoid(y_hat), y.long())
+        self.test_total_precision.update(F.sigmoid(y_hat), y.long())
+        self.test_total_recall.update(F.sigmoid(y_hat), y.long())
+        self.test_total_pr_curve.update(F.sigmoid(y_hat), y.long())
+
+        for semidx, y_hat in semidx_y_hat_dict.items():
+            y = semidx_y_dict[semidx]
+
+            logger.debug(f"Semantic class {semidx} - y_hat size: {y_hat.size()}; y size: {y.size()}")
+
+            if semidx not in self.test_per_semantic_accuracy:
+                self.test_per_semantic_accuracy[semidx] = BinaryAccuracy().to(self.device)
+                self.test_per_semantic_f1[semidx] = BinaryF1Score().to(self.device)
+                self.test_per_semantic_precision[semidx] = BinaryPrecision().to(self.device)
+                self.test_per_semantic_recall[semidx] = BinaryRecall().to(self.device)
+                self.test_per_semantic_pr_curve[semidx] = BinaryPrecisionRecallCurve().to(self.device)
+            self.test_per_semantic_accuracy[semidx].update(F.sigmoid(y_hat), y.long())
+            self.test_per_semantic_f1[semidx].update(F.sigmoid(y_hat), y.long())
+            self.test_per_semantic_precision[semidx].update(F.sigmoid(y_hat), y.long())
+            self.test_per_semantic_recall[semidx].update(F.sigmoid(y_hat), y.long())
+            self.test_per_semantic_pr_curve[semidx].update(F.sigmoid(y_hat), y.long())
+
+    def predict_step(self, batch: torch.Tensor):
+        x, semantic_label, y = batch
+        self.predict_semantic_labels.append(semantic_label.detach().clone().to(x))
+
+        if self.model_mode == "SVDDFM" or self.model_mode == "SVD_DFM":
+            y_hat, _, decoder_features, manifolds_features = self.model(x)
+            self.__compute_predict_metrics_common__(y_hat, y, semantic_label)
+            if self.inference_configs.save_features:
+                self.predict_manifolds_features_0.append(manifolds_features[0, :, :].detach().clone().to(x))
+                self.predict_manifolds_decoder_features_0.append(self.model.dfm_decoder(
+                                                                manifolds_features[0, :, :]).detach().clone().to(x))
+                self.predict_manifolds_features_1.append(manifolds_features[1, :, :].detach().clone().to(x))
+                self.predict_manifolds_decoder_features_1.append(self.model.dfm_decoder(
+                                                                manifolds_features[1, :, :]).detach().clone().to(x))
+                self.predict_feat_model_outputs.append(self.model.feat_model(x).detach().clone().to(x))
+                self.predict_decoder_features.append(decoder_features.detach().clone().to(x))
+        elif self.model_mode == "SVD":
+            y_hat, features, _, _ = self.model(x)
+            self.__compute_predict_metrics_common__(y_hat, y, semantic_label)
+            if self.inference_configs.save_features:
+                self.predict_feat_model_outputs.append(features.detach().clone().to(x))
+        elif self.model_mode == "FEAT_LINEAR":
+            y_hat = self.feat_extractor(x)
+            self.__compute_predict_metrics_common__(y_hat, y, semantic_label)
+            if self.inference_configs.save_features:
+                self.predict_feat_model_outputs.append(self.feat_extractor.dino_model(x).detach().clone().to(x))
+        elif self.model_mode == "FEAT":
+            y_hat = self.feat_extractor(x)
+            self.predict_feat_model_outputs.append(y_hat.detach().clone().to(x))
+    
+    def on_predict_epoch_end(self):
+        self.log("predict_total_Accuracy_epoch", self.predict_total_accuracy.compute(), prog_bar=True, sync_dist=True)
+        self.log("predict_total_F1_epoch", self.predict_total_f1.compute(), prog_bar=True, sync_dist=True)
+        self.log("predict_total_Precision_epoch", self.predict_total_precision.compute(), prog_bar=True, sync_dist=True)
+        self.log("predict_total_Recall_epoch", self.predict_total_recall.compute(), prog_bar=True, sync_dist=True)
+        precision, recall, _ = self.predict_total_pr_curve.compute()
+        sorted_indices = torch.argsort(recall)
+        recall_sorted = recall[sorted_indices]
+        precision_sorted = precision[sorted_indices]
+        ap = torch.trapz(precision_sorted, recall_sorted)
+        self.log("predict_total_AP_epoch", ap, prog_bar=True, sync_dist=True)
+        
+        aps = []
+        for semidx in self.predict_per_semantic_accuracy.keys():
+            self.log(f"predict_semidx_{semidx}_Accuracy_epoch",
+                     self.predict_per_semantic_accuracy[semidx].compute(),
+                     prog_bar=False, sync_dist=True)
+            self.log(f"predict_semidx_{semidx}_F1_epoch",
+                     self.predict_per_semantic_f1[semidx].compute(),
+                     prog_bar=False, sync_dist=True)
+            self.log(f"predict_semidx_{semidx}_Precision_epoch",
+                     self.predict_per_semantic_precision[semidx].compute(),
+                     prog_bar=False, sync_dist=True)
+            self.log(f"predict_semidx_{semidx}_Recall_epoch",
+                     self.predict_per_semantic_recall[semidx].compute(),
+                     prog_bar=False, sync_dist=True)
+            precision, recall, _ = self.predict_per_semantic_pr_curve[semidx].compute()
+            sorted_indices = torch.argsort(recall)
+            recall_sorted = recall[sorted_indices]
+            precision_sorted = precision[sorted_indices]
+            ap = torch.trapz(precision_sorted, recall_sorted)
+            aps.append(ap)
+        mAP = torch.stack(aps).mean()
+        self.log("predict_total_mAP_epoch", mAP, prog_bar=True, sync_dist=True)
+
+        # concatenate all the collected tensors and save to disk
+        if self.inference_configs.save_features:
+            os.makedirs(self.inference_configs.save_dir, exist_ok=True)
+            
+            torch.save(torch.cat(self.predict_semantic_labels, dim=0).cpu(),
+                    os.path.join(self.inference_configs.save_dir, "predict_semantic_labels.pt"))
+            if self.model_mode == "SVDDFM" or self.model_mode == "SVD_DFM":
+                torch.save(torch.cat(self.predict_feat_model_outputs, dim=0).cpu(),
+                        os.path.join(self.inference_configs.save_dir, "predict_feat_model_outputs.pt"))
+                torch.save(torch.cat(self.predict_decoder_features, dim=0).cpu(),
+                        os.path.join(self.inference_configs.save_dir, "predict_decoder_features.pt"))
+                torch.save(torch.cat(self.predict_manifolds_features_0, dim=0).cpu(),
+                        os.path.join(self.inference_configs.save_dir, "predict_manifolds_features_0.pt"))
+                torch.save(torch.cat(self.predict_manifolds_decoder_features_0, dim=0).cpu(),
+                        os.path.join(self.inference_configs.save_dir, "predict_manifolds_decoder_features_0.pt"))
+                torch.save(torch.cat(self.predict_manifolds_features_1, dim=0).cpu(),
+                        os.path.join(self.inference_configs.save_dir, "predict_manifolds_features_1.pt"))
+                torch.save(torch.cat(self.predict_manifolds_decoder_features_1, dim=0).cpu(),
+                        os.path.join(self.inference_configs.save_dir, "predict_manifolds_decoder_features_1.pt"))
+            else:
+                torch.save(torch.cat(self.predict_feat_model_outputs, dim=0).cpu(),
+                        os.path.join(self.inference_configs.save_dir, "predict_feat_model_outputs.pt"))
 
     def configure_optimizers(self):
         if self.model_mode == "FEAT_LINEAR":

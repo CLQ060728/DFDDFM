@@ -23,10 +23,10 @@ class ClipFeatureExtractor(nn.Module):
             chkpt_dir: str, directory of the pre-trained CLIP model
         """
         super(ClipFeatureExtractor, self).__init__()
-        self.clip_vision_model = CLIPModel.from_pretrained(chkpt_dir).vision_model
-        self.clip_vision_model.requires_grad_(False)  # Freeze the CLIP model
-        # self.clip_vision_model.config.output_hidden_states = True  # Enable output hidden states
-        self.clip_vision_model.to(device)
+        self.dino_model = CLIPModel.from_pretrained(chkpt_dir).vision_model
+        self.dino_model.requires_grad_(False)  # Freeze the DINO model
+        # self.dino_model.config.output_hidden_states = True  # Enable output hidden states
+        self.dino_model.to(device)
         self.device = device
         self.as_linear_classifier = as_linear_classifier
         if self.as_linear_classifier:
@@ -49,9 +49,9 @@ class ClipFeatureExtractor(nn.Module):
                              + " or a torch.Tensor.")
         
         if not self.as_linear_classifier:
-            return self.clip_vision_model(imgs)
+            return self.dino_model(imgs)
         else:
-            features = self.clip_vision_model(imgs) 
+            features = self.dino_model(imgs)
             features = features.last_hidden_state[:, 1:, :].mean(dim=1) # Average pooling excluding CLS token
             return self.head(features)
 

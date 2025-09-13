@@ -256,6 +256,109 @@ class DFDDFMDataset(Dataset):
         return transforms.Compose([resize, center_crop, to_tensor, normalize])
 
 
+class DFDDFMPredictDataset(Dataset):
+    def __init__(self,
+                 model_type: Literal["CLIP", "DINO_V2", "DINO_V3_LVD", "DINO_V3_SAT"],
+                 imgs_path: str,
+                 sem_idxes_path: str = None,
+                 dfd_idxes_path: str = None):
+        """
+            params:
+                model_type: Literal["CLIP", "DINO_V2", "DINO_V3_LVD", "DINO_V3_SAT"] The type of the model to be used. Options are "CLIP", "DINO_V2", "DINO_V3_LVD", "DINO_V3_SAT".
+                imgs_path: str The path to the images.
+                sem_idxes_path: str The path to the semantic classes.
+                dfd_idxes_path: str The path to the deepfake detection classes.
+        """
+        assert os.path.exists(imgs_path), f"Image path {imgs_path} does not exist."
+        assert model_type in ["CLIP", "DINO_V2", "DINO_V3_LVD", "DINO_V3_SAT"], f"model_type should be one of ['CLIP', 'DINO_V2', 'DINO_V3_LVD', 'DINO_V3_SAT'], but got {model_type}."
+        assert sem_idxes_path is not None and os.path.exists(sem_idxes_path), f"sem_idxes_path {sem_idxes_path} does not exist."
+        assert dfd_idxes_path is not None and os.path.exists(dfd_idxes_path), f"dfd_idxes_path {dfd_idxes_path} does not exist."
+        
+        with open(sem_idxes_path, "r") as sem_idxes_file:
+            self.semantic_indices = json.load(sem_idxes_file)
+        with open(dfd_idxes_path, "r") as dfd_idxes_file:
+            self.dfd_indices = json.load(dfd_idxes_file)
+        
+        self.data = np.array(os.listdir(imgs_path))
+        self.semantic_labels = np.array([int(self.semantic_indices[img_path]) for img_path in self.data], dtype=np.int64)
+        self.dfd_labels = np.array([int(self.dfd_indices[img_path]) for img_path in self.data], dtype=np.float32)
+        data_indices = np.arange(self.data.shape[0])
+        np.random.shuffle(data_indices)
+        self.data = self.data[data_indices]
+        self.semantic_labels = self.semantic_labels[data_indices]
+        self.dfd_labels = self.dfd_labels[data_indices]
+        self.imgs_path = imgs_path
+
+    def __len__(self):
+        return self.data.shape[0]
+    
+    def __getitem__(self, idx):
+        img_path = self.data[idx]
+        assert img_path is not None, "Image path cannot be None"
+        assert img_path.endswith(".jpg") or img_path.endswith(".jpeg") or \
+               img_path.endswith(".JPEG") or img_path.endswith(".png"), "Invalid image format"
+        
+        semantic_label = torch.tensor(self.semantic_labels[idx], requires_grad=False).long()
+        dfd_label = torch.tensor(self.dfd_labels[idx], requires_grad=False).float()
+        img = Image.open(os.path.join(self.imgs_path, img_path)).convert("RGB")
+        
+        if self.model_type == "CLIP":
+            transform = self.transform_img_clip()
+        elif self.model_type == "DINO_V2":
+            transform = self.transform_img_dinov2()
+        elif self.model_type == "DINO_V3_LVD":
+            transform = self.transform_img_lvd()
+        elif self.model_type == "DINO_V3_SAT":
+            transform = self.transform_img_sat()
+        
+        img_tensor = transform(img)
+
+        return img_tensor, semantic_label, dfd_label
+
+    def transform_img_clip(self, resize_size: int = 256):
+        resize = transforms.Resize((resize_size, resize_size), antialias=True,
+                                    interpolation=transforms.InterpolationMode.BICUBIC)
+        center_crop = transforms.CenterCrop(224)
+        to_tensor = transforms.ToTensor()
+        normalize = transforms.Normalize(
+            mean=(0.48145466, 0.4578275, 0.40821073),
+            std=(0.26862954, 0.26130258, 0.27577711),
+        )
+        return transforms.Compose([resize, center_crop, to_tensor, normalize])
+
+    def transform_img_dinov2(self, resize_size: int = 256):
+        resize = transforms.Resize((resize_size, resize_size), antialias=True,
+                                   interpolation=transforms.InterpolationMode.BICUBIC)
+        center_crop = transforms.CenterCrop(224)
+        to_tensor = transforms.ToTensor()
+        normalize = transforms.Normalize(
+            mean=(0.485, 0.456, 0.406),
+            std=(0.229, 0.224, 0.225)
+        )
+        return transforms.Compose([resize, center_crop, to_tensor, normalize])
+
+    def transform_img_lvd(self, resize_size: int = 256):
+        resize = transforms.Resize((resize_size, resize_size), antialias=True,
+                                   interpolation=transforms.InterpolationMode.BICUBIC)
+        center_crop = transforms.CenterCrop(224)
+        to_tensor = transforms.ToTensor()
+        normalize = transforms.Normalize(
+            mean=(0.485, 0.456, 0.406),
+            std=(0.229, 0.224, 0.225),
+        )
+        return transforms.Compose([resize, center_crop, to_tensor, normalize])
+    
+    def transform_img_sat(self, resize_size: int = 256):
+        resize = transforms.Resize((resize_size, resize_size), antialias=True,
+                                   interpolation=transforms.InterpolationMode.BICUBIC)
+        center_crop = transforms.CenterCrop(224)
+        to_tensor = transforms.ToTensor()
+        normalize = transforms.Normalize(
+            mean=(0.430, 0.411, 0.296),
+            std=(0.213, 0.156, 0.143),
+        )
+        return transforms.Compose([resize, center_crop, to_tensor, normalize])
+
 class DFDDFMTrainDataModule(LTN.LightningDataModule):
     def __init__(self, 
                  model_type: Literal["CLIP", "DINO_V2", "DINO_V3_LVD", "DINO_V3_SAT"],
@@ -266,7 +369,9 @@ class DFDDFMTrainDataModule(LTN.LightningDataModule):
                  manifolds_indices_path: str = None,
                  sem_idxes_path: str = None,
                  batch_size: int = 120,
-                 num_workers: int = 2):
+                 num_workers: int = 2,
+                 predict_dataset_path: str = None,
+                 dfd_idxes_path: str = None):
         """
         Initialize the DFDDFMTrainDataModule with the given dataset paths.
         Params:
@@ -276,31 +381,39 @@ class DFDDFMTrainDataModule(LTN.LightningDataModule):
             test_dataset_path: str The path to the test dataset.
             manifolds_paths: Tuple[str, str] The paths to the manifolds images paths.
             manifolds_indices_path: str The path to the mapping of the corresponding manifolds' indices.
-            sem_idxes_path: str The path to the semantic indices. Required if test_dataset_path is provided.
+            sem_idxes_path: str The path to the semantic indices. Required if test_dataset_path or predict_dataset_path is provided.
             batch_size: int The batch size for the dataloaders.
             num_workers: int The number of workers for the dataloaders.
+            predict_dataset_path: str The path to the prediction dataset.
+            dfd_idxes_path: str The path to the deepfake detection indices. Required if predict_dataset_path is provided.
         """
         super(DFDDFMTrainDataModule, self).__init__()
 
-        assert not (train_dataset_path is None and val_dataset_path is None and test_dataset_path is None), "At least one of train_dataset_path, val_dataset_path, test_dataset_path must be provided."
+        assert not (train_dataset_path is None and val_dataset_path is None and test_dataset_path \
+               is None and predict_dataset_path is None), \
+               "At least one of train_dataset_path, val_dataset_path, test_dataset_path, predict_dataset_path must be provided."
         if not train_dataset_path:
             assert train_dataset_path.endswith("TRAIN") or train_dataset_path.endswith("train"), f"Invalid train dataset path {train_dataset_path}"
         if not val_dataset_path:
             assert val_dataset_path.endswith("VAL") or val_dataset_path.endswith("val"), f"Invalid val dataset path {val_dataset_path}"
         if not test_dataset_path:
             assert test_dataset_path.endswith("TEST") or test_dataset_path.endswith("test"), f"Invalid test dataset path {test_dataset_path}"
-        assert manifolds_indices_path is not None and os.path.exists(manifolds_indices_path), f"manifolds_indices_path {manifolds_indices_path} does not exist."
+        if predict_dataset_path is None or predict_dataset_path == "":
+            assert manifolds_indices_path is not None and os.path.exists(manifolds_indices_path), f"manifolds_indices_path {manifolds_indices_path} does not exist."
 
         self.train_dataset_path = train_dataset_path
         self.val_dataset_path = val_dataset_path
         self.test_dataset_path = test_dataset_path
         self.model_type = model_type
         self.manifolds_paths = manifolds_paths
-        with open(manifolds_indices_path, "r") as mani_idxes_file:
-            self.manifolds_indices_correspondence = json.load(mani_idxes_file)
+        if predict_dataset_path is None or predict_dataset_path == "":
+            with open(manifolds_indices_path, "r") as mani_idxes_file:
+                self.manifolds_indices_correspondence = json.load(mani_idxes_file)
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.sem_idxes_path = sem_idxes_path
+        self.dfd_idxes_path = dfd_idxes_path
+        self.predict_dataset_path = predict_dataset_path
 
     def setup(self, stage=None):
         if stage == "fit":
@@ -330,6 +443,13 @@ class DFDDFMTrainDataModule(LTN.LightningDataModule):
                                               "test",
                                               self.sem_idxes_path,
                                               self.manifolds_indices_correspondence)
+        if stage == "predict":
+            assert self.predict_dataset_path is not None, "predict_dataset_path must be provided for predict"
+
+            self.predict_dataset = DFDDFMPredictDataset(self.model_type,
+                                                        self.predict_dataset_path,
+                                                        self.sem_idxes_path,
+                                                        self.dfd_idxes_path)
 
     def train_dataloader(self):
         return DataLoader(self.train_dataset, batch_size=self.batch_size, pin_memory=True,
@@ -341,4 +461,8 @@ class DFDDFMTrainDataModule(LTN.LightningDataModule):
 
     def test_dataloader(self):
         return DataLoader(self.test_dataset, batch_size=self.batch_size, pin_memory=True,
+                          shuffle=False, num_workers=self.num_workers)
+    
+    def predict_dataloader(self):
+        return DataLoader(self.predict_dataset, batch_size=self.batch_size, pin_memory=True,
                           shuffle=False, num_workers=self.num_workers)
