@@ -685,7 +685,8 @@ class DFDDFMTrainer(LTN.LightningModule):
     def test_step(self, batch: torch.Tensor):
         total_performance = {}
         if self.model_mode == "SVDDFM" or self.model_mode == "SVD_DFM":
-            forward_batch, semantic_indices = batch
+            x_pair, x2_manifold_indices, y_pair, semantic_indices = batch
+            forward_batch = (x_pair, x2_manifold_indices, y_pair)
             y_hat_1, _, _, _, y_hat_2, _, _, _, _, y_pair = self(forward_batch)
             y_1, y_2 = y_pair
 
