@@ -304,10 +304,10 @@ class DFDDFMTrainer(LTN.LightningModule):
                     recon_loss_value_2 = recon_loss_dict_2[f"reconstruction_loss_{self.recon_loss.loss_type}"]
                     total_loss.update({"recon_loss": (recon_loss_value_1 + recon_loss_value_2) / 2})
                     
-                    if self.current_epoch < self.optim_configs.dissparcons_start_epoch:
-                        recon_reg_loss_dict = self.recon_reg_loss(manifolds_features_1, manifolds_features_2)
-                        recon_reg_loss_value = recon_reg_loss_dict["recon_reg_loss"]
-                        total_loss.update({"recon_reg_loss": recon_reg_loss_value})
+                if self.current_epoch < self.optim_configs.dissparcons_start_epoch and self.use_recon_reg_loss:
+                    recon_reg_loss_dict = self.recon_reg_loss(manifolds_features_1, manifolds_features_2)
+                    recon_reg_loss_value = recon_reg_loss_dict["recon_reg_loss"]
+                    total_loss.update({"recon_reg_loss": recon_reg_loss_value})
                 
                 # compute other dfm losses after 'dissparcons_start_epoch's, i.e., distance, sparsity, consistency
                 if self.current_epoch >= self.optim_configs.dissparcons_start_epoch:
@@ -401,10 +401,10 @@ class DFDDFMTrainer(LTN.LightningModule):
                 recon_loss_value_2 = recon_loss_dict_2[f"reconstruction_loss_{self.recon_loss.loss_type}"]
                 total_loss.update({"recon_loss": (recon_loss_value_1 + recon_loss_value_2) / 2})
                 
-                if self.current_epoch < self.optim_configs.dissparcons_start_epoch:
-                    recon_reg_loss_dict = self.recon_reg_loss(manifolds_features_1, manifolds_features_2)
-                    recon_reg_loss_value = recon_reg_loss_dict["recon_reg_loss"]
-                    total_loss.update({"recon_reg_loss": recon_reg_loss_value})
+            if self.current_epoch < self.optim_configs.dissparcons_start_epoch and self.use_recon_reg_loss:
+                recon_reg_loss_dict = self.recon_reg_loss(manifolds_features_1, manifolds_features_2)
+                recon_reg_loss_value = recon_reg_loss_dict["recon_reg_loss"]
+                total_loss.update({"recon_reg_loss": recon_reg_loss_value})
             
             # compute other dfm losses after 'dissparcons_start_epoch's, i.e., distance, sparsity, consistency
             if self.current_epoch >= self.optim_configs.dissparcons_start_epoch:
